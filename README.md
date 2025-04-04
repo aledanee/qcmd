@@ -28,7 +28,15 @@ A simple command-line tool that generates shell commands using local AI models v
 - [Ollama](https://ollama.ai/) installed and running
 - At least one language model pulled (e.g., qwen2.5-coder:0.5b)
 
-### Quick Install
+### Install from PyPI (Recommended)
+
+```bash
+pip install ibrahimiq-qcmd
+```
+
+This will install the package and make the `qcmd` command available in your PATH.
+
+### Install from Source
 
 ```bash
 git clone https://github.com/aledanee/qcmd.git
