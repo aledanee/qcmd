@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>qcmd - AI-powered Command Generator</title>
+    <style>
+        :root {
+            --primary: #3498db;
+            --secondary: #2ecc71;
+            --accent: #9b59b6;
+            --dark: #34495e;
+            --light: #ecf0f1;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --code-bg: #2d3436;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: var(--light);
+        }
+        
+        header {
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            color: white;
+            padding: 2rem 0;
+            text-align: center;
+        }
+        
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 0;
+        }
+        
+        nav {
+            background-color: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        nav ul {
+            display: flex;
+            list-style: none;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        
+        nav li a {
+            display: block;
+            padding: 1rem;
+            color: var(--dark);
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        nav li a:hover {
+            color: var(--primary);
+        }
+        
+        section {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        h2 {
+            font-size: 2rem;
+            margin: 1.5rem 0 1rem;
+            color: var(--primary);
+            border-bottom: 2px solid var(--primary);
+            padding-bottom: 0.5rem;
+        }
+        
+        h3 {
+            font-size: 1.5rem;
+            margin: 1.5rem 0 1rem;
+            color: var(--dark);
+        }
+        
+        p {
+            margin-bottom: 1rem;
+        }
+        
+        pre, code {
+            font-family: 'Consolas', 'Monaco', monospace;
+            background-color: var(--code-bg);
+            color: white;
+            border-radius: 4px;
+        }
+        
+        code {
+            padding: 0.2rem 0.4rem;
+            font-size: 0.9rem;
+        }
+        
+        pre {
+            padding: 1rem;
+            margin: 1rem 0;
+            overflow-x: auto;
+        }
+        
+        pre code {
+            padding: 0;
+            background: none;
+        }
+        
+        .command {
+            color: #f1c40f;
+        }
+        
+        .option {
+            color: #2ecc71;
+        }
+        
+        .parameter {
+            color: #e74c3c;
+        }
+        
+        .comment {
+            color: #95a5a6;
+        }
+        
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+        
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            border-left: 4px solid var(--primary);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .card h3 {
+            margin-top: 0;
+            color: var(--primary);
+        }
+        
+        .card.warning {
+            border-left-color: var(--warning);
+        }
+        
+        .card.warning h3 {
+            color: var(--warning);
+        }
+        
+        .card.success {
+            border-left-color: var(--secondary);
+        }
+        
+        .card.success h3 {
+            color: var(--secondary);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0 2rem;
+        }
+        
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background-color: #f1f1f1;
+            font-weight: 600;
+        }
+        
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+        
+        .pill {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .pill.primary {
+            background-color: var(--primary);
+            color: white;
+        }
+        
+        .pill.secondary {
+            background-color: var(--secondary);
+            color: white;
+        }
+        
+        .pill.warning {
+            background-color: var(--warning);
+            color: white;
+        }
+        
+        .pill.accent {
+            background-color: var(--accent);
+            color: white;
+        }
+        
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: var(--primary);
+        }
+        
+        footer {
+            background-color: var(--dark);
+            color: white;
+            text-align: center;
+            padding: 2rem 0;
+            margin-top: 2rem;
+        }
+        
+        @media (max-width: 768px) {
+            nav ul {
+                flex-direction: column;
+            }
+            
+            nav li a {
+                padding: 0.5rem 1rem;
+            }
+            
+            .card-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>qcmd</h1>
+            <p>AI-powered Command Generator using Local LLMs</p>
+        </div>
+    </header>
+    
+    <nav>
+        <ul>
+            <li><a href="#overview">Overview</a></li>
+            <li><a href="#installation">Installation</a></li>
+            <li><a href="#usage">Usage</a></li>
+            <li><a href="#safety">Safety</a></li>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#examples">Examples</a></li>
+            <li><a href="#options">Options</a></li>
+            <li><a href="#shell">Interactive Shell</a></li>
+            <li><a href="#logs">Log Analysis</a></li>
+        </ul>
+    </nav>
+    
+    <div class="container">
+        <section id="overview">
+            <h2>Overview</h2>
+            <p>
+                <strong>qcmd</strong> is a powerful command-line tool that generates shell commands using AI models via Ollama. 
+                Simply describe what you want to do in natural language, and qcmd will generate the appropriate command.
+            </p>
+            
+            <div class="card-grid">
+                <div class="card">
+                    <h3>Simplicity</h3>
+                    <p>No more memorizing complex commands. Just describe what you want to do, and let AI generate the right command for you.</p>
+                </div>
+                <div class="card">
+                    <h3>Intelligence</h3>
+                    <p>Leverages local language models to understand your intent and generate accurate shell commands.</p>
+                </div>
+                <div class="card">
+                    <h3>Error Fixing</h3>
+                    <p>Automatically analyzes errors and suggests fixes, making the command-line experience smoother.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section id="installation">
+            <h2>Installation</h2>
+            <p>
+                Before installing qcmd, ensure you have:
+            </p>
+            <ul>
+                <li>Python 3.6 or higher</li>
+                <li><a href="https://ollama.ai/" target="_blank">Ollama</a> installed and running</li>
+                <li>At least one language model pulled (e.g., qwen2.5-coder:0.5b)</li>
+            </ul>
+            
+            <h3>Installation Steps</h3>
+            <p>To install qcmd:</p>
+            
+            <pre><code>git clone https://github.com/yourusername/qcmd.git
+cd qcmd
+chmod +x setup-qcmd.sh
+./setup-qcmd.sh</code></pre>
+            
+            <p>The setup script will prompt you to choose between:</p>
+            <ul>
+                <li>User-local installation (recommended)</li>
+                <li>System-wide installation (requires sudo)</li>
+            </ul>
+            
+            <div class="card warning">
+                <h3>Requirements</h3>
+                <p>Make sure Ollama is running before using qcmd:</p>
+                <pre><code>ollama serve</code></pre>
+            </div>
+        </section>
+        
+        <section id="usage">
+            <h2>Basic Usage</h2>
+            <p>
+                Using qcmd is as simple as typing your request in natural language:
+            </p>
+            
+            <pre><code><span class="command">qcmd</span> "list all files in the current directory"</code></pre>
+            
+            <p>This will generate a command (like <code>ls -la</code>) and ask if you want to execute it.</p>
+            
+            <h3>Auto-Execute Mode</h3>
+            <pre><code><span class="command">qcmd</span> <span class="option">-e</span> "find large log files"</code></pre>
+            
+            <h3>Smart Auto-Fix Mode</h3>
+            <pre><code><span class="command">qcmd</span> <span class="option">-A</span> "find Python files modified today"</code></pre>
+            <p>The auto mode will automatically generate, execute, and fix commands without requiring confirmation. It will attempt to fix failed commands up to a maximum number of attempts.</p>
+            
+            <h3>Log Analysis Mode</h3>
+            <pre><code><span class="command">qcmd</span> <span class="option">--logs</span></code></pre>
+            <p>Find and analyze log files on your system. The tool will detect available log files, let you select one, and provide AI-powered analysis of its content. It can also monitor logs in real-time with continuous analysis of new entries.</p>
+            
+            <h3>All Logs Mode</h3>
+            <pre><code><span class="command">qcmd</span> <span class="option">--all-logs</span></code></pre>
+            <p>Displays a comprehensive list of all log files found on your system in a single view. Select any log file to analyze or monitor it in real-time.</p>
+            
+            <h3>Analyze Specific File</h3>
+            <pre><code><span class="command">qcmd</span> <span class="option">--analyze-file</span> <span class="parameter">/path/to/file.log</span></code></pre>
+            <p>Directly analyze a specific file using AI to identify patterns, errors, and issues.</p>
+            
+            <h3>Monitor File Continuously</h3>
+            <pre><code><span class="command">qcmd</span> <span class="option">--monitor</span> <span class="parameter">/path/to/file.log</span></code></pre>
+            <p>Continuously monitor a specific file in real-time, analyzing new content as it's added with AI.</p>
+            
+            <h3>Interactive Shell</h3>
+            <pre><code><span class="command">qcmd</span> <span class="option">-s</span></code></pre>
+            <p>Start an interactive shell for continuous command generation.</p>
+        </section>
+        
+        <section id="safety">
+            <h2>Safety Features</h2>
+            <p>
+                qcmd prioritizes safety by ensuring you are always in control. It includes several safety features:
+            </p>
+            
+            <div class="card-grid">
+                <div class="card warning">
+                    <h3>Always Confirms</h3>
+                    <p>Every command requires explicit confirmation before execution, except in auto mode.</p>
+                </div>
+                
+                <div class="card warning">
+                    <h3>Dangerous Command Detection</h3>
+                    <p>Detects potentially destructive commands and provides extra warnings.</p>
+                </div>
+                
+                <div class="card warning">
+                    <h3>Auto-Fix Confirmation</h3>
+                    <p>Asks for permission before attempting to fix failed commands (in normal mode).</p>
+                </div>
+            </div>
+            
+            <h3>Dangerous Command Detection</h3>
+            <p>
+                qcmd analyzes commands for dangerous patterns like:
+            </p>
+            <ul>
+                <li>File system destructive operations (<code>rm -rf</code>)</li>
+                <li>Disk formatting commands (<code>mkfs</code>)</li>
+                <li>Raw device operations (<code>dd</code>)</li>
+                <li>Fork bombs and other known dangerous patterns</li>
+            </ul>
+            
+            <p>
+                When a potentially dangerous command is detected, you'll receive a clear warning and must explicitly type "yes" to proceed.
+            </p>
+            
+            <div class="card">
+                <h3>Safety Philosophy</h3>
+                <p>
+                    AI-generated commands are powerful but should always be under human supervision. qcmd is designed to be helpful while ensuring you maintain complete control over what executes on your system.
+                </p>
+            </div>
+        </section>
+        
+        <section id="features">
+            <h2>Key Features</h2>
+            
+            <div class="card-grid">
+                <div class="card success">
+                    <h3>Auto Mode</h3>
+                    <p>Automatically generates, executes, and fixes commands until they succeed without requiring confirmation.</p>
+                    <p>Use <code>qcmd -A "your command"</code></p>
+                </div>
+                
+                <div class="card success">
+                    <h3>Error Analysis</h3>
+                    <p>Analyzes errors and provides explanations and suggestions.</p>
+                    <p>Use <code>qcmd -a "your command"</code></p>
+                </div>
+                
+                <div class="card success">
+                    <h3>Interactive Shell</h3>
+                    <p>Continuous operation with command history and tab completion.</p>
+                    <p>Use <code>qcmd -s</code></p>
+                </div>
+                
+                <div class="card success">
+                    <h3>Command History</h3>
+                    <p>Saves and recalls previous commands.</p>
+                    <p>Use <code>qcmd --history</code></p>
+                </div>
+                
+                <div class="card success">
+                    <h3>Tab Completion</h3>
+                    <p>Context-aware tab completion for arguments and commands.</p>
+                    <p>Install with <code>setup-qcmd.sh</code></p>
+                </div>
+                
+                <div class="card success">
+                    <h3>Multiple Models</h3>
+                    <p>Switch between different AI models for best results.</p>
+                    <p>Use <code>qcmd -m model_name "command"</code></p>
+                </div>
+                
+                <div class="card success">
+                    <h3>Log Analysis</h3>
+                    <p>Find, analyze, and continuously monitor system log files.</p>
+                    <p>Use <code>qcmd --logs</code> or <code>/logs</code> in shell mode</p>
+                </div>
+                
+                <div class="card success">
+                    <h3>File Monitoring</h3>
+                    <p>Analyze and continuously monitor any file with AI.</p>
+                    <p>Use <code>qcmd --monitor</code> or <code>/monitor</code> in shell</p>
+                </div>
+                
+                <div class="card warning">
+                    <h3>Safety First</h3>
+                    <p>Always confirms before executing any command (except in auto mode), with special warnings for dangerous operations.</p>
+                    <p>Commands in normal mode require explicit confirmation</p>
+                </div>
+            </div>
+        </section>
+        
+        <section id="examples">
+            <h2>Examples</h2>
+            
+            <h3>Basic Command Generation</h3>
+            <pre><code><span class="command">qcmd</span> "list all files in the current directory"
+<span class="command">qcmd</span> "find large log files"</code></pre>
+            
+            <h3>Auto-Execute Commands</h3>
+            <pre><code><span class="command">qcmd</span> <span class="option">-e</span> "check disk space usage"
+<span class="command">qcmd</span> <span class="option">--execute</span> "show current directory"</code></pre>
+            
+            <h3>Using Different Models</h3>
+            <pre><code><span class="command">qcmd</span> <span class="option">-m</span> <span class="parameter">llama2:7b</span> "restart the nginx service"
+<span class="command">qcmd</span> <span class="option">--model</span> <span class="parameter">deepseek-coder</span> "create a backup of config files"</code></pre>
+            
+            <h3>Adjusting Creativity</h3>
+            <pre><code><span class="command">qcmd</span> <span class="option">-t</span> <span class="parameter">0.7</span> "find all JPG images"
+<span class="command">qcmd</span> <span class="option">--temperature</span> <span class="parameter">0.9</span> "monitor network traffic"</code></pre>
+            
+            <h3>AI Error Analysis</h3>
+            <pre><code><span class="command">qcmd</span> <span class="option">--analyze</span> "find files larger than 1GB"
+<span class="command">qcmd</span> <span class="option">-a</span> <span class="option">-m</span> <span class="parameter">llama2:7b</span> "create a tar archive of logs"</code></pre>
+            
+            <h3>Auto Mode (Auto-Execute with Error Fixing)</h3>
+            <pre><code><span class="command">qcmd</span> <span class="option">--auto</span> "find Python files modified today"
+<span class="command">qcmd</span> <span class="option">-A</span> "search logs for errors"
+<span class="command">qcmd</span> <span class="option">-A</span> <span class="option">-m</span> <span class="parameter">llama2:7b</span> "get system information"</code></pre>
+
+            <h3>Log Analysis</h3>
+            <pre><code><span class="command">qcmd</span> <span class="option">--logs</span>
+<span class="command">qcmd</span> <span class="option">--logs</span> <span class="option">-m</span> <span class="parameter">llama2:7b</span>
+<span class="command">qcmd</span> <span class="option">--all-logs</span>
+<span class="command">qcmd</span> <span class="option">--analyze-file</span> <span class="parameter">/var/log/syslog</span>
+<span class="command">qcmd</span> <span class="option">--monitor</span> <span class="parameter">/var/log/auth.log</span></code></pre>
+        </section>
+        
+        <section id="options">
+            <h2>Command-Line Options</h2>
+            
+            <h3>Main Arguments</h3>
+            <table>
+                <tr>
+                    <th>Option</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>prompt</code></td>
+                    <td>Natural language description of the command you want</td>
+                </tr>
+            </table>
+            
+            <h3>Model Selection</h3>
+            <table>
+                <tr>
+                    <th>Option</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>--model</code>, <code>-m</code></td>
+                    <td>Model to use (default: qwen2.5-coder:0.5b)</td>
+                </tr>
+                <tr>
+                    <td><code>--list</code>, <code>-l</code></td>
+                    <td>List available models and exit</td>
+                </tr>
+                <tr>
+                    <td><code>--list-models</code></td>
+                    <td>Same as --list, shows available models</td>
+                </tr>
+            </table>
+            
+            <h3>Execution Options</h3>
+            <table>
+                <tr>
+                    <th>Option</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>--execute</code>, <code>-e</code></td>
+                    <td>Execute the generated command after confirmation</td>
+                </tr>
+                <tr>
+                    <td><code>--yes</code>, <code>-y</code></td>
+                    <td>Use simplified confirmation (just press Enter to execute)</td>
+                </tr>
+                <tr>
+                    <td><code>--dry-run</code>, <code>-d</code></td>
+                    <td>Just show the command without executing</td>
+                </tr>
+                <tr>
+                    <td><code>--analyze</code>, <code>-a</code></td>
+                    <td>Analyze errors if command execution fails</td>
+                </tr>
+                <tr>
+                    <td><code>--auto</code>, <code>-A</code></td>
+                    <td>Auto mode: automatically generate, execute, and fix errors without confirmation</td>
+                </tr>
+                <tr>
+                    <td><code>--max-attempts</code></td>
+                    <td>Maximum number of fix attempts in auto mode (default: 3)</td>
+                </tr>
+            </table>
+            
+            <h3>Shell Options</h3>
+            <table>
+                <tr>
+                    <th>Option</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>--shell</code>, <code>-s</code></td>
+                    <td>Start an interactive shell</td>
+                </tr>
+                <tr>
+                    <td><code>--history</code></td>
+                    <td>Show command history</td>
+                </tr>
+                <tr>
+                    <td><code>--history-count</code></td>
+                    <td>Number of history entries to show (default: 20)</td>
+                </tr>
+            </table>
+            
+            <h3>Generation Options</h3>
+            <table>
+                <tr>
+                    <th>Option</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>--temperature</code>, <code>-t</code></td>
+                    <td>Temperature for generation (0.0-1.0, higher=more creative)</td>
+                </tr>
+            </table>
+            
+            <h3>Output Options</h3>
+            <table>
+                <tr>
+                    <th>Option</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>--no-color</code></td>
+                    <td>Disable colored output</td>
+                </tr>
+                <tr>
+                    <td><code>--examples</code></td>
+                    <td>Show detailed usage examples</td>
+                </tr>
+                <tr>
+                    <td><code>--save-output</code></td>
+                    <td>Save command output to a file</td>
+                </tr>
+            </table>
+
+            <h3>Configuration Options</h3>
+            <table>
+                <tr>
+                    <th>Option</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>--set-timeout SECONDS</code></td>
+                    <td>Set API request timeout in seconds</td>
+                </tr>
+                <tr>
+                    <td><code>--no-timeout</code></td>
+                    <td>Disable API request timeout</td>
+                </tr>
+                <tr>
+                    <td><code>--save-config</code></td>
+                    <td>Save current settings as default configuration</td>
+                </tr>
+                <tr>
+                    <td><code>--reset-config</code></td>
+                    <td>Reset configuration to defaults</td>
+                </tr>
+                <tr>
+                    <td><code>--config-path</code></td>
+                    <td>Show the path to the configuration file</td>
+                </tr>
+                <tr>
+                    <td><code>--add-favorite-log PATH</code></td>
+                    <td>Add a log file to favorites</td>
+                </tr>
+            </table>
+
+            <h3>Log Analysis Options</h3>
+            <table>
+                <tr>
+                    <th>Option</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>--logs</code></td>
+                    <td>Find and analyze system log files with AI</td>
+                </tr>
+                <tr>
+                    <td><code>--all-logs</code></td>
+                    <td>Show all available log files in a single list</td>
+                </tr>
+                <tr>
+                    <td><code>--analyze-file FILE</code></td>
+                    <td>Analyze a specific file with AI</td>
+                </tr>
+                <tr>
+                    <td><code>--monitor FILE</code></td>
+                    <td>Monitor a specific file continuously with real-time AI analysis</td>
+                </tr>
+            </table>
+        </section>
+        
+        <section id="shell">
+            <h2>Interactive Shell</h2>
+            <p>
+                The interactive shell mode allows continuous command generation without restarting qcmd.
+                Start it with:
+            </p>
+            
+            <pre><code><span class="command">qcmd</span> <span class="option">-s</span></code></pre>
+            
+            <h3>Shell Commands</h3>
+            <table>
+                <tr>
+                    <th>Command</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>/help</code></td>
+                    <td>Show help message</td>
+                </tr>
+                <tr>
+                    <td><code>/exit</code>, <code>/quit</code></td>
+                    <td>Exit the shell</td>
+                </tr>
+                <tr>
+                    <td><code>/history</code></td>
+                    <td>Show command history</td>
+                </tr>
+                <tr>
+                    <td><code>/models</code></td>
+                    <td>List available models</td>
+                </tr>
+                <tr>
+                    <td><code>/model &lt;name&gt;</code></td>
+                    <td>Switch to a different model</td>
+                </tr>
+                <tr>
+                    <td><code>/temperature &lt;t&gt;</code></td>
+                    <td>Set temperature (0.0-1.0)</td>
+                </tr>
+                <tr>
+                    <td><code>/auto</code></td>
+                    <td>Enable auto mode</td>
+                </tr>
+                <tr>
+                    <td><code>/manual</code></td>
+                    <td>Disable auto mode</td>
+                </tr>
+                <tr>
+                    <td><code>/analyze</code></td>
+                    <td>Toggle error analysis</td>
+                </tr>
+                <tr>
+                    <td><code>/execute</code></td>
+                    <td>Execute last generated command</td>
+                </tr>
+                <tr>
+                    <td><code>/dry-run</code></td>
+                    <td>Generate without executing</td>
+                </tr>
+                <tr>
+                    <td><code>/logs</code></td>
+                    <td>Find and analyze log files</td>
+                </tr>
+                <tr>
+                    <td><code>/all-logs</code></td>
+                    <td>Show all available log files in a single list</td>
+                </tr>
+                <tr>
+                    <td><code>/analyze-file &lt;path&gt;</code></td>
+                    <td>Analyze a specific file with AI</td>
+                </tr>
+                <tr>
+                    <td><code>/monitor &lt;path&gt;</code></td>
+                    <td>Monitor a file continuously with real-time AI analysis</td>
+                </tr>
+            </table>
+            
+            <div class="card">
+                <h3>Shell Features</h3>
+                <ul>
+                    <li>Command history with up/down arrow navigation</li>
+                    <li>Tab completion for shell commands</li>
+                    <li>Persistent settings across commands</li>
+                    <li>Colorized output</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="logs">
+            <h2>Log Analysis Feature</h2>
+            <p>
+                qcmd includes a powerful log analysis tool that helps you find, monitor, and understand system log files using AI.
+            </p>
+            
+            <h3>How It Works</h3>
+            <ol>
+                <li>qcmd searches your system for common log files and service logs</li>
+                <li>You choose a log file from the menu displayed</li>
+                <li>The AI analyzes the log content and provides a summary, highlighting any errors or patterns</li>
+                <li>Optionally, you can monitor the log file in real-time with continuous AI analysis of new entries</li>
+            </ol>
+            
+            <div class="card-grid">
+                <div class="card">
+                    <h3>Finding Logs</h3>
+                    <p>The tool automatically scans common log locations such as:</p>
+                    <ul>
+                        <li>/var/log/ and subdirectories</li>
+                        <li>System service logs (via journalctl)</li>
+                        <li>Application logs in standard locations</li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h3>AI Analysis</h3>
+                    <p>The AI analyzes logs to identify:</p>
+                    <ul>
+                        <li>Error patterns and their frequency</li>
+                        <li>Warning messages that may indicate issues</li>
+                        <li>Unusual activity or suspicious behavior</li>
+                        <li>Performance bottlenecks or resource issues</li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h3>Real-time Monitoring</h3>
+                    <p>When monitoring is enabled:</p>
+                    <ul>
+                        <li>The tool watches for new entries in the log file</li>
+                        <li>New content is displayed as it appears</li>
+                        <li>AI analysis is performed on new entries</li>
+                        <li>Press Ctrl+C to stop monitoring</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <h3>Using Log Analysis</h3>
+            <p>From the command line:</p>
+            <pre><code><span class="command">qcmd</span> <span class="option">--logs</span></code></pre>
+            
+            <p>From the interactive shell:</p>
+            <pre><code><span class="command">/logs</span></code></pre>
+            
+            <p>With a specific model:</p>
+            <pre><code><span class="command">qcmd</span> <span class="option">--logs</span> <span class="option">-m</span> <span class="parameter">llama2:7b</span></code></pre>
+            
+            <h3>View All Log Files</h3>
+            <p>To see a complete list of all log files:</p>
+            <pre><code><span class="command">qcmd</span> <span class="option">--all-logs</span></code></pre>
+            
+            <p>In the interactive shell:</p>
+            <pre><code><span class="command">/all-logs</span></code></pre>
+            
+            <h3>File Analysis and Monitoring</h3>
+            <p>Analyze a specific file:</p>
+            <pre><code><span class="command">qcmd</span> <span class="option">--analyze-file</span> <span class="parameter">/path/to/logs/app.log</span></code></pre>
+            
+            <p>Monitor a file in real-time:</p>
+            <pre><code><span class="command">qcmd</span> <span class="option">--monitor</span> <span class="parameter">/var/log/auth.log</span></code></pre>
+            
+            <p>In the interactive shell:</p>
+            <pre><code><span class="command">/analyze-file</span> <span class="parameter">/path/to/logs/app.log</span>
+<span class="command">/monitor</span> <span class="parameter">/var/log/auth.log</span></code></pre>
+        </section>
+    </div>
+    
+    <footer>
+        <div class="container">
+            <p>qcmd - AI-powered Command Generator</p>
+            <p>Powered by Ollama and local language models</p>
+        </div>
+    </footer>
+</body>
+</html> 

@@ -1,0 +1,2565 @@
+#!/usr/bin/env python3
+"""
+qcmd - A simple command-line tool that generates shell commands using Qwen2.5-Coder via Ollama.
+
+Version: 1.0.0
+Copyright (c) 2024
+License: MIT
+"""
+
+import argparse
+import json
+import subprocess
+import sys
+import requests
+import os
+import textwrap
+import tempfile
+import readline
+import threading
+import time
+import re
+import configparser
+from datetime import datetime
+from typing import Optional, Dict, Any, Tuple, List
+
+# Ollama API settings
+OLLAMA_API = "http://127.0.0.1:11434/api"
+DEFAULT_MODEL = "qwen2.5-coder:0.5b"
+
+# History file
+HISTORY_FILE = os.path.expanduser("~/.qcmd_history")
+MAX_HISTORY = 1000  # Maximum number of history entries to keep
+
+# Configuration file
+CONFIG_FILE = os.path.expanduser("~/.qcmd_config")
+REQUEST_TIMEOUT = 30  # Timeout for API requests in seconds
+LOG_CACHE_FILE = os.path.expanduser("~/.qcmd_log_cache")
+LOG_CACHE_EXPIRY = 3600  # Cache expires after 1 hour (in seconds)
+
+# Additional dangerous patterns for improved detection
+DANGEROUS_PATTERNS = [
+    # File system operations
+    "rm -rf", "rm -r /", "rm -f /", "rmdir /", "shred -uz", 
+    "mkfs", "dd if=/dev/zero", "format", "fdisk", "mkswap",
+    # Disk operations
+    "> /dev/sd", "of=/dev/sd", "dd of=/dev", 
+    # Network-dangerous
+    ":(){ :|:& };:", ":(){:|:&};:", "fork bomb", "while true", "dd if=/dev/random of=/dev/port",
+    # Permission changes
+    "chmod -R 777 /", "chmod 777 /", "chown -R", "chmod 000", 
+    # File moves/redirections
+    "mv /* /dev/null", "> /dev/null", "2>&1",
+    # System commands
+    "halt", "shutdown", "poweroff", "reboot", "init 0", "init 6",
+    # User management
+    "userdel -r root", "passwd root", "deluser --remove-home"
+]
+
+# Terminal colors for better output
+class Colors:
+    HEADER = '\033[95m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    END = '\033[0m'
+
+def save_to_history(prompt: str) -> None:
+    """
+    Save a command prompt to the history file
+    
+    Args:
+        prompt: The command prompt to save
+    """
+    try:
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
+        
+        # Read existing history
+        history = []
+        if os.path.exists(HISTORY_FILE):
+            try:
+                with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+                    history = [line.strip() for line in f.readlines()]
+            except UnicodeDecodeError:
+                # If UTF-8 fails, try with a more permissive encoding
+                with open(HISTORY_FILE, 'r', encoding='latin-1') as f:
+                    history = [line.strip() for line in f.readlines()]
+        
+        # Add new entry with timestamp
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        history.append(f"{timestamp} | {prompt}")
+        
+        # Trim history if needed
+        if len(history) > MAX_HISTORY:
+            history = history[-MAX_HISTORY:]
+        
+        # Write back to file
+        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(history))
+    except Exception as e:
+        # Don't crash the program if history saving fails
+        print(f"{Colors.YELLOW}Could not save to history: {e}{Colors.END}", file=sys.stderr)
+
+def load_history(count: int = 10) -> List[str]:
+    """
+    Load recent command history
+    
+    Args:
+        count: Number of history entries to load
+        
+    Returns:
+        List of recent command prompts
+    """
+    try:
+        if not os.path.exists(HISTORY_FILE):
+            return []
+        
+        try:
+            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+                history = [line.strip() for line in f.readlines()]
+        except UnicodeDecodeError:
+            # If UTF-8 fails, try with a more permissive encoding
+            with open(HISTORY_FILE, 'r', encoding='latin-1') as f:
+                history = [line.strip() for line in f.readlines()]
+            
+        # Extract just the prompts (remove timestamps)
+        prompts = []
+        for entry in reversed(history[-count:]):
+            parts = entry.split(" | ", 1)
+            if len(parts) > 1:
+                prompts.append(parts[1])
+                
+        return prompts
+    except Exception as e:
+        print(f"{Colors.YELLOW}Could not load history: {e}{Colors.END}", file=sys.stderr)
+        return []
+
+def show_history(count: int = 20, search_term: str = None) -> None:
+    """
+    Display command history with optional search
+    
+    Args:
+        count: Number of history entries to show
+        search_term: Optional search term to filter history
+    """
+    try:
+        if not os.path.exists(HISTORY_FILE):
+            print(f"{Colors.YELLOW}No command history found.{Colors.END}")
+            return
+            
+        with open(HISTORY_FILE, 'r') as f:
+            history = [line.strip() for line in f.readlines()]
+        
+        if not history:
+            print(f"{Colors.YELLOW}No command history found.{Colors.END}")
+            return
+            
+        # Filter history if search term is provided
+        if search_term:
+            search_term = search_term.lower()
+            filtered_history = []
+            for entry in history:
+                if search_term in entry.lower():
+                    filtered_history.append(entry)
+            history = filtered_history
+            
+            if not history:
+                print(f"{Colors.YELLOW}No matching history entries found for '{search_term}'.{Colors.END}")
+                return
+                
+            print(f"\n{Colors.GREEN}{Colors.BOLD}Command History matching '{search_term}':{Colors.END}")
+        else:
+            print(f"\n{Colors.GREEN}{Colors.BOLD}Command History:{Colors.END}")
+            
+        print(f"{Colors.CYAN}{'#':<4} {'Timestamp':<20} {'Command'}{Colors.END}")
+        print("-" * 80)
+        
+        # Show the most recent entries first, up to the count limit
+        for i, entry in enumerate(reversed(history[-count:])):
+            idx = len(history) - count + i + 1
+            parts = entry.split(" | ", 1)
+            if len(parts) > 1:
+                timestamp, prompt = parts
+                print(f"{i+1:<4} {timestamp:<20} {prompt}")
+            else:
+                print(f"{i+1:<4} {'Unknown':<20} {entry}")
+                
+    except Exception as e:
+        print(f"{Colors.YELLOW}Could not display history: {e}{Colors.END}", file=sys.stderr)
+
+def generate_command(prompt: str, model: str = DEFAULT_MODEL, temperature: float = 0.2) -> str:
+    """
+    Generate a shell command from a natural language description.
+    
+    Args:
+        prompt: The natural language description of what command to generate
+        model: The model to use for generation
+        temperature: Temperature for generation
+        
+    Returns:
+        The generated command as a string
+    """
+    system_prompt = """You are a command-line expert. Generate a shell command based on the user's request.
+Reply with ONLY the command, nothing else - no explanations or markdown."""
+
+    formatted_prompt = f"""Generate a shell command for this request: "{prompt}"
+
+Output only the exact command with no introduction, explanation, or markdown formatting."""
+    
+    # Get available models for fallback
+    available_models = []
+    try:
+        available_models = list_models()
+    except:
+        pass
+        
+    # Try with the specified model first
+    max_retries = 3
+    retry_delay = 2  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            # Prepare the request payload
+            payload = {
+                "model": model,
+                "prompt": formatted_prompt,
+                "system": system_prompt,
+                "stream": False,
+                "temperature": temperature,
+            }
+            
+            if attempt > 0:
+                print(f"{Colors.YELLOW}Retry attempt {attempt+1}/{max_retries}...{Colors.END}")
+            else:
+                print(f"{Colors.BLUE}Generating command with {Colors.BOLD}{model}{Colors.END}{Colors.BLUE}...{Colors.END}")
+            
+            # Make the API request with timeout
+            response = requests.post(f"{OLLAMA_API}/generate", json=payload, timeout=REQUEST_TIMEOUT)
+            response.raise_for_status()
+            result = response.json()
+            
+            # Extract the command from the response
+            command = result.get("response", "").strip()
+            
+            # Clean up the command (remove any markdown formatting)
+            if command.startswith("```") and "\n" in command:
+                # Handle multiline code blocks
+                lines = command.split("\n")
+                command = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+            elif command.startswith("```") and command.endswith("```"):
+                # Handle single line code blocks with triple backticks
+                command = command[3:-3].strip()
+            elif command.startswith("`") and command.endswith("`"):
+                # Handle inline code with single backticks
+                command = command[1:-1].strip()
+                
+            return command
+                
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                print(f"{Colors.YELLOW}Request timed out. Retrying in {retry_delay} seconds...{Colors.END}")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            else:
+                print(f"{Colors.RED}Error: Request to Ollama API timed out after {REQUEST_TIMEOUT} seconds.{Colors.END}")
+                
+                # Try fallback if the original model isn't available
+                if available_models and model != DEFAULT_MODEL and DEFAULT_MODEL in available_models:
+                    print(f"{Colors.YELLOW}Trying with fallback model {DEFAULT_MODEL}...{Colors.END}")
+                    try:
+                        # Use the default model as fallback
+                        payload["model"] = DEFAULT_MODEL
+                        response = requests.post(f"{OLLAMA_API}/generate", json=payload, timeout=REQUEST_TIMEOUT)
+                        response.raise_for_status()
+                        result = response.json()
+                        command = result.get("response", "").strip()
+                        if command:
+                            print(f"{Colors.GREEN}Successfully generated command with fallback model.{Colors.END}")
+                            return command
+                    except:
+                        # Fallback failed as well
+                        pass
+                        
+                print(f"{Colors.YELLOW}Please check if Ollama is running and responsive.{Colors.END}")
+                return "echo 'Error: Command generation failed due to timeout'"
+                
+        except requests.exceptions.ConnectionError:
+            if attempt < max_retries - 1:
+                print(f"{Colors.YELLOW}Connection error. Retrying in {retry_delay} seconds...{Colors.END}")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            else:
+                print(f"{Colors.RED}Error: Could not connect to Ollama API after {max_retries} attempts.{Colors.END}")
+                print(f"{Colors.YELLOW}Make sure Ollama is running with 'ollama serve'{Colors.END}", file=sys.stderr)
+                return "echo 'Error: Command generation failed - API connection issue'"
+                
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1:
+                print(f"{Colors.YELLOW}Request error: {e}. Retrying in {retry_delay} seconds...{Colors.END}")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            else:
+                print(f"{Colors.RED}Error connecting to Ollama API: {e}{Colors.END}", file=sys.stderr)
+                
+                # Try fallback if the original model isn't available
+                if available_models and model != DEFAULT_MODEL and DEFAULT_MODEL in available_models:
+                    print(f"{Colors.YELLOW}Trying with fallback model {DEFAULT_MODEL}...{Colors.END}")
+                    try:
+                        # Use the default model as fallback
+                        payload["model"] = DEFAULT_MODEL
+                        response = requests.post(f"{OLLAMA_API}/generate", json=payload, timeout=REQUEST_TIMEOUT)
+                        response.raise_for_status()
+                        result = response.json()
+                        command = result.get("response", "").strip()
+                        if command:
+                            print(f"{Colors.GREEN}Successfully generated command with fallback model.{Colors.END}")
+                            return command
+                    except:
+                        # Fallback failed as well
+                        pass
+                        
+                print(f"{Colors.YELLOW}Make sure Ollama is running with 'ollama serve'{Colors.END}", file=sys.stderr)
+                return "echo 'Error: Command generation failed - API connection issue'"
+                
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"{Colors.YELLOW}Unexpected error: {e}. Retrying in {retry_delay} seconds...{Colors.END}")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            else:
+                print(f"{Colors.RED}Unexpected error: {e}{Colors.END}", file=sys.stderr)
+                return "echo 'Error: Command generation failed'"
+
+def analyze_error(error_output: str, command: str, model: str = DEFAULT_MODEL) -> str:
+    """
+    Analyze command execution error using AI.
+    
+    Args:
+        error_output: The error message from the command execution
+        command: The command that was executed
+        model: The Ollama model to use
+        
+    Returns:
+        Analysis and suggested fix for the error
+    """
+    system_prompt = """You are a command-line expert. Analyze the error message from a failed shell command and provide:
+1. A brief explanation of what went wrong
+2. A specific suggestion to fix the issue
+3. A corrected command that would work
+
+Be concise and direct."""
+
+    formatted_prompt = f"""The following command failed:
+```
+{command}
+```
+
+With this error output:
+```
+{error_output}
+```
+
+What went wrong and how should I fix it?"""
+    
+    try:
+        # Prepare the request payload
+        payload = {
+            "model": model,
+            "prompt": formatted_prompt,
+            "system": system_prompt,
+            "stream": False,
+            "temperature": 0.2,
+        }
+        
+        print(f"{Colors.BLUE}Analyzing error with {Colors.BOLD}{model}{Colors.END}{Colors.BLUE}...{Colors.END}")
+        
+        # Make the API request
+        response = requests.post(f"{OLLAMA_API}/generate", json=payload)
+        response.raise_for_status()
+        result = response.json()
+        
+        # Extract the analysis from the response
+        analysis = result.get("response", "").strip()
+        return analysis
+        
+    except requests.exceptions.RequestException as e:
+        return f"Error connecting to Ollama API: {e}"
+    except Exception as e:
+        return f"Error analyzing the command: {e}"
+
+def list_models() -> List[str]:
+    """
+    List all available models from Ollama.
+    
+    Returns:
+        List of available model names
+    """
+    model_names = []
+    try:
+        print(f"{Colors.BLUE}Fetching available models from Ollama...{Colors.END}")
+        response = requests.get(f"{OLLAMA_API}/tags", timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+        models = response.json().get("models", [])
+        
+        if not models:
+            print(f"{Colors.YELLOW}No models found. Try pulling some models with 'ollama pull <model>'{Colors.END}")
+            return model_names
+            
+        print(f"\n{Colors.GREEN}{Colors.BOLD}Available models:{Colors.END}")
+        print(f"{Colors.CYAN}{'Name':<25} {'Size':>10} {'Last Modified':<20}{Colors.END}")
+        print("-" * 60)
+        for model in models:
+            name = model.get("name", "unknown")
+            model_names.append(name)
+            size = model.get("size", 0) // (1024*1024)  # Convert to MB
+            modified = model.get("modified", "")
+            # Highlight the default model
+            if name == DEFAULT_MODEL:
+                print(f"{Colors.BOLD}{name:<25} {size:>8} MB   {modified}{Colors.END} {Colors.GREEN}(default){Colors.END}")
+            else:
+                print(f"{name:<25} {size:>8} MB   {modified}")
+        
+        print(f"\n{Colors.YELLOW}💡 Tip: You can set a different default model with --model{Colors.END}")
+        return model_names
+            
+    except requests.exceptions.Timeout:
+        print(f"{Colors.RED}Error: Request to Ollama API timed out after {REQUEST_TIMEOUT} seconds.{Colors.END}")
+        print(f"{Colors.YELLOW}Please check if Ollama is running and responsive.{Colors.END}")
+        return model_names
+    except requests.exceptions.RequestException as e:
+        print(f"{Colors.RED}Error connecting to Ollama API: {e}{Colors.END}", file=sys.stderr)
+        print(f"{Colors.YELLOW}Make sure Ollama is running with 'ollama serve'{Colors.END}", file=sys.stderr)
+        return model_names
+    except Exception as e:
+        print(f"{Colors.RED}Unexpected error: {e}{Colors.END}", file=sys.stderr)
+        return model_names
+
+def execute_command(command: str, analyze_errors: bool = False, model: str = DEFAULT_MODEL) -> Tuple[int, str]:
+    """
+    Execute a shell command and capture its output.
+    
+    Args:
+        command: The command to execute
+        analyze_errors: Whether to analyze errors if the command fails
+        model: The model to use for error analysis
+        
+    Returns:
+        Tuple of (returncode, command_output)
+    """
+    try:
+        # Check for potentially dangerous commands
+        is_dangerous = any(pattern in command.lower() for pattern in DANGEROUS_PATTERNS)
+        
+        if is_dangerous:
+            print(f"\n{Colors.RED}⚠️ WARNING: This command may be destructive! ⚠️{Colors.END}")
+            print(f"{Colors.RED}Please review carefully before proceeding.{Colors.END}")
+            confirmation = input(f"\n{Colors.RED}{Colors.BOLD}Are you ABSOLUTELY SURE you want to execute this potentially dangerous command? (yes/NO): {Colors.END}")
+            if confirmation.lower() != "yes":
+                print(f"{Colors.YELLOW}Command execution cancelled for safety.{Colors.END}")
+                return 1, "Command execution cancelled for safety."
+        
+        print(f"\n{Colors.GREEN}Executing: {Colors.BOLD}{command}{Colors.END}\n")
+        
+        # Create a visual separator
+        terminal_width = os.get_terminal_size().columns
+        print("-" * terminal_width)
+        
+        # Capture the command output
+        process = subprocess.Popen(
+            command, 
+            shell=True, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.STDOUT,
+            universal_newlines=True
+        )
+        
+        output = ""
+        for line in process.stdout:
+            output += line
+            sys.stdout.write(line)
+            sys.stdout.flush()
+        
+        # Wait for the process to complete
+        returncode = process.wait()
+        
+        # Create a visual separator
+        print("-" * terminal_width)
+        
+        if returncode != 0:
+            print(f"\n{Colors.YELLOW}Command exited with status code {returncode}{Colors.END}")
+            
+        return returncode, output
+            
+    except Exception as e:
+        error_msg = f"Error executing command: {e}"
+        print(f"{Colors.RED}{error_msg}{Colors.END}", file=sys.stderr)
+        return 1, error_msg
+
+def print_cool_header():
+    """
+    Print a cool banner for the tool.
+    """
+    print(f"""
+{Colors.CYAN}╭─────────────────────────────────────────╮
+│ {Colors.BOLD}qcmd - AI-powered Command Generator{Colors.END}{Colors.CYAN}    │
+│ {Colors.BLUE}Powered by Qwen2.5-Coder via Ollama{Colors.END}{Colors.CYAN}    │
+╰─────────────────────────────────────────╯{Colors.END}
+    """)
+
+def print_examples():
+    """
+    Print more detailed examples of how to use the tool.
+    """
+    print(f"\n{Colors.GREEN}{Colors.BOLD}Examples:{Colors.END}")
+    print(f"  {Colors.CYAN}Basic command generation:{Colors.END}")
+    print(f"    {Colors.BOLD}qcmd{Colors.END} \"list all files in the current directory\"")
+    print(f"    {Colors.BOLD}qcmd{Colors.END} \"find large log files\"")
+    
+    print(f"\n  {Colors.CYAN}Auto-execute commands:{Colors.END}")
+    print(f"    {Colors.BOLD}qcmd -e{Colors.END} \"check disk space usage\"")
+    print(f"    {Colors.BOLD}qcmd --execute{Colors.END} \"show current directory\"")
+    
+    print(f"\n  {Colors.CYAN}Using different models:{Colors.END}")
+    print(f"    {Colors.BOLD}qcmd -m llama2:7b{Colors.END} \"restart the nginx service\"")
+    print(f"    {Colors.BOLD}qcmd --model deepseek-coder{Colors.END} \"create a backup of config files\"")
+    
+    print(f"\n  {Colors.CYAN}Adjusting creativity:{Colors.END}")
+    print(f"    {Colors.BOLD}qcmd -t 0.7{Colors.END} \"find all JPG images\"")
+    print(f"    {Colors.BOLD}qcmd --temperature 0.9{Colors.END} \"monitor network traffic\"")
+    
+    print(f"\n  {Colors.CYAN}AI error analysis:{Colors.END}")
+    print(f"    {Colors.BOLD}qcmd --analyze{Colors.END} \"find files larger than 1GB\"")
+    print(f"    {Colors.BOLD}qcmd -a -m llama2:7b{Colors.END} \"create a tar archive of logs\"")
+    
+    print(f"\n  {Colors.CYAN}Auto mode (auto-execute with error fixing):{Colors.END}")
+    print(f"    {Colors.BOLD}qcmd --auto{Colors.END} \"find Python files modified today\"") 
+    print(f"    {Colors.BOLD}qcmd -A{Colors.END} \"search logs for errors\"")
+    print(f"    {Colors.BOLD}qcmd -A -m llama2:7b{Colors.END} \"get system information\"")
+    print(f"    {Colors.YELLOW}Note: Auto mode executes commands automatically without confirmation{Colors.END}")
+    print(f"    {Colors.YELLOW}      (Dangerous commands will still require explicit confirmation){Colors.END}")
+    
+    print(f"\n  {Colors.CYAN}Log Analysis:{Colors.END}")
+    print(f"    {Colors.BOLD}qcmd --logs{Colors.END} (find and analyze system logs)")
+    print(f"    {Colors.BOLD}qcmd --all-logs{Colors.END} (view all log files in one list)")
+    print(f"    {Colors.BOLD}qcmd --analyze-file /var/log/syslog{Colors.END} (analyze specific file)")
+    print(f"    {Colors.BOLD}qcmd --monitor /var/log/auth.log{Colors.END} (monitor file in real-time)")
+    print(f"    Inside shell: {Colors.BOLD}/logs{Colors.END} (access log analysis tools)")
+    print(f"    Inside shell: {Colors.BOLD}/all-logs{Colors.END} (view all available log files)")
+    print(f"    Inside shell: {Colors.BOLD}/analyze-file /path/to/file.log{Colors.END} (analyze file)")
+    print(f"    Inside shell: {Colors.BOLD}/monitor /path/to/file.log{Colors.END} (monitor file)")
+    
+    print(f"\n  {Colors.CYAN}Interactive shell:{Colors.END}")
+    print(f"    {Colors.BOLD}qcmd --shell{Colors.END} or {Colors.BOLD}qcmd -s{Colors.END}")
+    print(f"    Inside shell: {Colors.BOLD}/model llama2:7b{Colors.END} (change model)")
+    print(f"    Inside shell: {Colors.BOLD}/auto{Colors.END} (enable auto mode)")
+    
+    print(f"\n  {Colors.CYAN}Command history:{Colors.END}")
+    print(f"    {Colors.BOLD}qcmd --history{Colors.END} (show command history)")
+    print(f"    In interactive mode, use up/down arrows to navigate history")
+    print(f"    Use TAB for command completion")
+    
+    print(f"\n{Colors.YELLOW}💡 Tip: Use --auto or -A for the simplest way to run commands with automatic error fixing{Colors.END}")
+    print(f"{Colors.YELLOW}💡 Tip: Auto mode will execute commands automatically without asking for confirmation{Colors.END}")
+    print(f"{Colors.YELLOW}💡 Tip: Install tab completion with the setup-qcmd.sh script{Colors.END}")
+
+def run_interactive_shell(model: str = DEFAULT_MODEL, temperature: float = 0.2, 
+                       analyze_errors: bool = False, auto_mode_enabled: bool = False,
+                       max_attempts: int = 3) -> None:
+    """
+    Run an interactive shell for continuous command generation
+    
+    Args:
+        model: The model to use for command generation
+        temperature: Temperature for generation
+        analyze_errors: Whether to analyze errors if commands fail
+        auto_mode_enabled: Whether to use auto mode by default
+        max_attempts: Maximum number of fix attempts in auto mode
+    """
+    print_cool_header()
+    print(f"{Colors.GREEN}Starting interactive qcmd shell...{Colors.END}")
+    print(f"{Colors.CYAN}• Type your command description")
+    print(f"• Use {Colors.BOLD}/help{Colors.END}{Colors.CYAN} to see available commands")
+    print(f"• Use {Colors.BOLD}/exit{Colors.END}{Colors.CYAN} or Ctrl+D to exit{Colors.END}")
+    print()
+    
+    # Set up readline for history in the interactive shell
+    history_file = os.path.expanduser("~/.qcmd_shell_history")
+    try:
+        readline.read_history_file(history_file)
+        readline.set_history_length(100)
+    except FileNotFoundError:
+        pass
+    
+    # Completion function for readline
+    def completer(text, state):
+        # Shell commands
+        commands = [
+            "/help", "/exit", "/quit", "/history", "/history-search", "/models", 
+            "/auto", "/manual", "/analyze", "/model", "/temperature",
+            "/execute", "/dry-run", "/logs", "/analyze-file", "/monitor", "/all-logs"
+        ]
+        
+        # Filter commands based on input
+        matches = [c for c in commands if c.startswith(text)]
+        
+        # Return match or None if no more matches
+        if state < len(matches):
+            return matches[state]
+        else:
+            return None
+    
+    # Set up readline completer
+    readline.set_completer(completer)
+    readline.parse_and_bind("tab: complete")
+    
+    # Main loop
+    current_model = model
+    current_temperature = temperature
+    current_analyze = analyze_errors
+    current_auto = auto_mode_enabled
+    
+    while True:
+        try:
+            # Display prompt with current model
+            prompt = input(f"\n{Colors.GREEN}qcmd ({Colors.BOLD}{current_model}{Colors.END}"
+                          f"{Colors.GREEN}) > {Colors.END}").strip()
+            
+            # Save to readline history
+            if prompt and not prompt.startswith("/"):
+                readline.add_history(prompt)
+                
+            # Handle empty input
+            if not prompt:
+                continue
+                
+            # Handle shell commands
+            if prompt.startswith("/"):
+                parts = prompt.split(maxsplit=1)
+                cmd = parts[0].lower()
+                
+                if cmd in ("/exit", "/quit"):
+                    print(f"{Colors.YELLOW}Exiting qcmd shell...{Colors.END}")
+                    break
+                    
+                elif cmd == "/help":
+                    print(f"\n{Colors.CYAN}{Colors.BOLD}Shell Commands:{Colors.END}")
+                    print(f"  {Colors.BOLD}/help{Colors.END}           Show this help message")
+                    print(f"  {Colors.BOLD}/exit{Colors.END}, {Colors.BOLD}/quit{Colors.END}   Exit the shell")
+                    print(f"  {Colors.BOLD}/history{Colors.END}        Show command history")
+                    print(f"  {Colors.BOLD}/history-search <term>{Colors.END}  Search command history")
+                    print(f"  {Colors.BOLD}/models{Colors.END}         List available models")
+                    print(f"  {Colors.BOLD}/model <name>{Colors.END}   Switch to a different model")
+                    print(f"  {Colors.BOLD}/temperature <t>{Colors.END} Set temperature (0.0-1.0)")
+                    print(f"  {Colors.BOLD}/auto{Colors.END}           Enable auto mode")
+                    print(f"  {Colors.BOLD}/manual{Colors.END}         Disable auto mode")
+                    print(f"  {Colors.BOLD}/analyze{Colors.END}        Toggle error analysis")
+                    print(f"  {Colors.BOLD}/execute{Colors.END}        Execute last generated command")
+                    print(f"  {Colors.BOLD}/dry-run{Colors.END}        Generate without executing")
+                    print(f"  {Colors.BOLD}/logs{Colors.END}           Find and analyze log files")
+                    print(f"  {Colors.BOLD}/all-logs{Colors.END}       Show all available log files")
+                    print(f"  {Colors.BOLD}/analyze-file <path>{Colors.END}  Analyze a specific file")
+                    print(f"  {Colors.BOLD}/monitor <path>{Colors.END}       Monitor a file continuously")
+                    
+                    print(f"\n{Colors.YELLOW}Current settings:{Colors.END}")
+                    print(f"  Model: {Colors.BOLD}{current_model}{Colors.END}")
+                    print(f"  Temperature: {Colors.BOLD}{current_temperature}{Colors.END}")
+                    print(f"  Auto mode: {Colors.BOLD}{current_auto}{Colors.END}")
+                    print(f"  Error analysis: {Colors.BOLD}{current_analyze}{Colors.END}")
+                
+                elif cmd == "/history":
+                    show_history()
+                    
+                elif cmd == "/history-search":
+                    if len(parts) > 1:
+                        search_term = parts[1]
+                        show_history(count=100, search_term=search_term)
+                    else:
+                        print(f"{Colors.YELLOW}Usage: /history-search <search_term>{Colors.END}")
+                    
+                elif cmd == "/models":
+                    list_models()
+                    
+                elif cmd == "/model":
+                    if len(parts) > 1:
+                        current_model = parts[1]
+                        print(f"{Colors.GREEN}Switched to model: {Colors.BOLD}{current_model}{Colors.END}")
+                    else:
+                        print(f"{Colors.YELLOW}Usage: /model <model_name>{Colors.END}")
+                        
+                elif cmd == "/temperature":
+                    if len(parts) > 1:
+                        try:
+                            t = float(parts[1])
+                            if 0 <= t <= 1:
+                                current_temperature = t
+                                print(f"{Colors.GREEN}Temperature set to: {Colors.BOLD}{current_temperature}{Colors.END}")
+                            else:
+                                print(f"{Colors.YELLOW}Temperature must be between 0 and 1{Colors.END}")
+                        except ValueError:
+                            print(f"{Colors.YELLOW}Invalid temperature value{Colors.END}")
+                    else:
+                        print(f"{Colors.YELLOW}Usage: /temperature <value>{Colors.END}")
+                        
+                elif cmd == "/auto":
+                    current_auto = True
+                    print(f"{Colors.GREEN}Auto mode {Colors.BOLD}enabled{Colors.END}")
+                    
+                elif cmd == "/manual":
+                    current_auto = False
+                    print(f"{Colors.GREEN}Auto mode {Colors.BOLD}disabled{Colors.END}")
+                    
+                elif cmd == "/analyze":
+                    current_analyze = not current_analyze
+                    state = "enabled" if current_analyze else "disabled"
+                    print(f"{Colors.GREEN}Error analysis {Colors.BOLD}{state}{Colors.END}")
+                    
+                elif cmd == "/execute":
+                    if 'command' in locals():
+                        print(f"\n{Colors.CYAN}Executing: {Colors.BOLD}{command}{Colors.END}")
+                        execute_command(command, current_analyze, current_model)
+                    else:
+                        print(f"{Colors.YELLOW}No command to execute. Generate one first.{Colors.END}")
+                        
+                elif cmd == "/dry-run":
+                    if len(parts) > 1:
+                        dry_run_prompt = parts[1]
+                        save_to_history(dry_run_prompt)
+                        print(f"{Colors.GREEN}Generating command for: {Colors.BOLD}{dry_run_prompt}{Colors.END}")
+                        command = generate_command(dry_run_prompt, current_model, current_temperature)
+                        print(f"\n{Colors.CYAN}Generated Command: {Colors.BOLD}{command}{Colors.END}")
+                        print(f"\n{Colors.YELLOW}Dry run - command not executed{Colors.END}")
+                    else:
+                        print(f"{Colors.YELLOW}Usage: /dry-run <prompt>{Colors.END}")
+                        
+                elif cmd == "/logs":
+                    handle_log_analysis(current_model)
+                    
+                elif cmd == "/all-logs":
+                    log_files = find_log_files()
+                    if log_files:
+                        print(f"{Colors.GREEN}Found {len(log_files)} log files:{Colors.END}")
+                        selected_log = display_log_selection(log_files)
+                        if selected_log:
+                            handle_log_selection(selected_log, current_model)
+                    else:
+                        print(f"{Colors.YELLOW}No accessible log files found on the system.{Colors.END}")
+                    
+                elif cmd == "/analyze-file":
+                    if len(parts) > 1:
+                        file_path = parts[1]
+                        if os.path.exists(file_path) and os.path.isfile(file_path):
+                            analyze_log_file(file_path, current_model, False)
+                        else:
+                            print(f"{Colors.RED}Error: File {file_path} does not exist or is not accessible.{Colors.END}")
+                    else:
+                        print(f"{Colors.YELLOW}Usage: /analyze-file <file_path>{Colors.END}")
+                
+                elif cmd == "/monitor":
+                    if len(parts) > 1:
+                        file_path = parts[1]
+                        if os.path.exists(file_path) and os.path.isfile(file_path):
+                            analyze_log_file(file_path, current_model, True)
+                        else:
+                            print(f"{Colors.RED}Error: File {file_path} does not exist or is not accessible.{Colors.END}")
+                    else:
+                        print(f"{Colors.YELLOW}Usage: /monitor <file_path>{Colors.END}")
+                        
+                else:
+                    print(f"{Colors.YELLOW}Unknown command: {cmd}{Colors.END}")
+                    print(f"{Colors.YELLOW}Type /help for available commands{Colors.END}")
+                    
+                continue
+            
+            # Normal command prompt - save to history
+            save_to_history(prompt)
+            
+            # Run in auto mode if enabled, otherwise normal mode
+            if current_auto:
+                auto_mode(prompt, current_model, max_attempts, current_temperature)
+            else:
+                # Generate the command
+                print(f"{Colors.GREEN}Generating command for: {Colors.BOLD}{prompt}{Colors.END}")
+                command = generate_command(prompt, current_model, current_temperature)
+                
+                # Display the generated command
+                print(f"\n{Colors.CYAN}Generated Command: {Colors.BOLD}{command}{Colors.END}")
+                
+                # Ask if user wants to execute
+                response = input(f"\n{Colors.GREEN}Do you want to execute this command? (y/n): {Colors.END}").lower()
+                if response in ["y", "yes"]:
+                    returncode, output = execute_command(command, current_analyze, current_model)
+                    
+                    # Analyze errors if requested and command failed
+                    if current_analyze and returncode != 0:
+                        print(f"\n{Colors.BLUE}Analyzing error...{Colors.END}")
+                        analysis = analyze_error(output, command, current_model)
+                        
+                        print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Error Analysis:{Colors.END}")
+                        print(f"{Colors.CYAN}{analysis}{Colors.END}")
+                        
+                        print(f"\n{Colors.GREEN}Would you like to fix this error and try again? (y/n): {Colors.END}", end="")
+                        if input().lower() in ["y", "yes"]:
+                            fixed_command = fix_command(command, output, current_model)
+                            print(f"\n{Colors.CYAN}Fixed Command: {Colors.BOLD}{fixed_command}{Colors.END}")
+                            
+                            print(f"\n{Colors.GREEN}Execute this fixed command? (y/n): {Colors.END}", end="")
+                            if input().lower() in ["y", "yes"]:
+                                execute_command(fixed_command, False, current_model)
+                else:
+                    print(f"{Colors.YELLOW}Command execution cancelled.{Colors.END}")
+            
+        except EOFError:
+            # Handle Ctrl+D
+            print(f"\n{Colors.YELLOW}Exiting qcmd shell...{Colors.END}")
+            break
+            
+        except KeyboardInterrupt:
+            # Handle Ctrl+C
+            print(f"\n{Colors.YELLOW}Command interrupted.{Colors.END}")
+            continue
+            
+        except Exception as e:
+            print(f"\n{Colors.RED}Error: {e}{Colors.END}")
+            continue
+    
+    # Save readline history
+    try:
+        readline.write_history_file(history_file)
+    except Exception:
+        pass
+
+def fix_command(command: str, error_output: str, model: str = DEFAULT_MODEL) -> str:
+    """
+    Generate a fixed command based on the error output.
+    
+    Args:
+        command: The original command that failed
+        error_output: The error message from the command execution
+        model: The model to use for generating the fix
+        
+    Returns:
+        The fixed command
+    """
+    system_prompt = """You are a command-line expert. A shell command has failed with an error. 
+Generate a CORRECTED version of the command that fixes the issue.
+Reply with ONLY the fixed command, no explanations, no markdown, and no backticks."""
+
+    formatted_prompt = f"""The following command failed:
+```
+{command}
+```
+
+With this error output:
+```
+{error_output}
+```
+
+Please provide ONLY the corrected command with no formatting:"""
+    
+    try:
+        # Prepare the request payload
+        payload = {
+            "model": model,
+            "prompt": formatted_prompt,
+            "system": system_prompt,
+            "stream": False,
+            "temperature": 0.2,
+        }
+        
+        print(f"{Colors.BLUE}Generating fixed command with {Colors.BOLD}{model}{Colors.END}{Colors.BLUE}...{Colors.END}")
+        
+        # Make the API request
+        response = requests.post(f"{OLLAMA_API}/generate", json=payload)
+        response.raise_for_status()
+        result = response.json()
+        
+        # Extract the fixed command from the response
+        fixed_command = result.get("response", "").strip()
+        
+        # Thorough cleanup of the command (remove any markdown formatting)
+        # Handle multiline code blocks with language specifier
+        if fixed_command.startswith("```") and "\n" in fixed_command:
+            lines = fixed_command.split("\n")
+            # Check if it's a complete code block
+            if lines[0].startswith("```") and lines[-1] == "```":
+                # Remove first and last lines
+                fixed_command = "\n".join(lines[1:-1]).strip()
+            else:
+                # Extract content after markdown start
+                fixed_command = "\n".join(lines[1:]).strip()
+                # If there's still a closing ``` at the end, remove it
+                if fixed_command.endswith("```"):
+                    fixed_command = fixed_command[:-3].strip()
+        # Handle single line code blocks
+        elif fixed_command.startswith("```") and fixed_command.endswith("```"):
+            fixed_command = fixed_command[3:-3].strip()
+        # Handle inline code with backticks
+        elif fixed_command.startswith("`") and fixed_command.endswith("`"):
+            fixed_command = fixed_command[1:-1].strip()
+        # Handle any remaining backticks
+        fixed_command = fixed_command.replace("```", "").replace("`", "").strip()
+        
+        return fixed_command
+        
+    except requests.exceptions.RequestException as e:
+        return command  # Return original command on error
+    except Exception as e:
+        return command  # Return original command on error
+
+def auto_mode(prompt: str, model: str = DEFAULT_MODEL, max_attempts: int = 3, temperature: float = 0.2) -> None:
+    """
+    Run in auto mode: generate, execute, and fix automatically.
+    
+    Args:
+        prompt: The natural language description of what command to generate
+        model: The model to use
+        max_attempts: Maximum number of attempts to fix a command
+        temperature: Temperature for generation
+    """
+    print(f"{Colors.GREEN}🤖 Auto mode activated for: {Colors.BOLD}{prompt}{Colors.END}")
+    
+    for attempt in range(1, max_attempts + 1):
+        if attempt == 1:
+            # First attempt: generate a new command
+            command = generate_command(prompt, model, temperature)
+        else:
+            # Subsequent attempts: fix the previous command
+            print(f"\n{Colors.YELLOW}Attempt {attempt}/{max_attempts}: Fixing command...{Colors.END}")
+            command = fix_command(command, output, model)
+        
+        # Clean up the command more thoroughly to remove any markdown formatting
+        # This is an extra safeguard beyond what generate_command and fix_command do
+        if command.startswith("```") and "\n" in command:
+            # Handle multiline code blocks
+            lines = command.split("\n")
+            if lines[0].startswith("```") and lines[-1] == "```":
+                # Remove first and last lines that are just markdown markers
+                command = "\n".join(lines[1:-1])
+            else:
+                # Try to extract content after the markdown start
+                command = "\n".join(lines[1:])
+        elif command.startswith("```"):
+            # Handle ```command``` format
+            command = command.replace("```", "").strip()
+        elif command.startswith("`") and command.endswith("`"):
+            # Handle `command` format
+            command = command[1:-1].strip()
+        
+        print(f"\n{Colors.CYAN}Generated Command: {Colors.BOLD}{command}{Colors.END}")
+        
+        # Execute the command automatically without asking for confirmation
+        print(f"\n{Colors.GREEN}Executing command automatically (auto mode)...{Colors.END}")
+        returncode, output = execute_command(command, False, model)
+        
+        # If command succeeded, we're done
+        if returncode == 0:
+            print(f"\n{Colors.GREEN}✓ Command executed successfully!{Colors.END}")
+            return
+        
+        # If we've reached the maximum number of attempts, show analysis
+        if attempt == max_attempts:
+            print(f"\n{Colors.RED}✗ Failed after {max_attempts} attempts.{Colors.END}")
+            print(f"\n{Colors.BLUE}Analyzing error...{Colors.END}")
+            analysis = analyze_error(output, command, model)
+            
+            print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Error Analysis:{Colors.END}")
+            print(f"{Colors.CYAN}{analysis}{Colors.END}")
+            return
+        
+        print(f"\n{Colors.YELLOW}Command failed. Automatically trying to fix it...{Colors.END}")
+
+def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool = False) -> None:
+    """
+    Analyze a log file continuously or once.
+    
+    Args:
+        log_file: Path to the log file to analyze
+        model: The model to use for analysis
+        background: Whether to run in background continuously
+    """
+    if not os.path.exists(log_file):
+        print(f"{Colors.RED}Error: Log file {log_file} does not exist.{Colors.END}")
+        return
+        
+    print(f"{Colors.GREEN}Analyzing log file: {Colors.BOLD}{log_file}{Colors.END}")
+    
+    # Get file size for pagination
+    file_size = os.path.getsize(log_file)
+    
+    # For very large files, ask if user wants to analyze only the last part
+    if file_size > 10 * 1024 * 1024 and not background:  # 10 MB
+        print(f"{Colors.YELLOW}Warning: This log file is very large ({file_size // (1024*1024)} MB).{Colors.END}")
+        response = input(f"{Colors.GREEN}Analyze only the last portion? (y/n, default: y): {Colors.END}").lower()
+        if not response or response.startswith('y'):
+            # Read only the last 1 MB
+            try:
+                with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+                    f.seek(max(0, file_size - 1 * 1024 * 1024))  # Go to last 1 MB
+                    # Skip partial line
+                    f.readline()
+                    log_content = f.read().strip()
+                print(f"{Colors.YELLOW}Analyzing only the last 1 MB of the log file.{Colors.END}")
+            except UnicodeDecodeError:
+                # If UTF-8 fails, try with a more permissive encoding
+                try:
+                    with open(log_file, 'r', encoding='latin-1') as f:
+                        f.seek(max(0, file_size - 1 * 1024 * 1024))  # Go to last 1 MB
+                        # Skip partial line
+                        f.readline()
+                        log_content = f.read().strip()
+                    print(f"{Colors.YELLOW}Analyzing only the last 1 MB of the log file.{Colors.END}")
+                except Exception as e:
+                    print(f"{Colors.RED}Error reading log file: {e}{Colors.END}")
+                    return
+        else:
+            # Read with pagination for very large files
+            log_content = read_large_file(log_file)
+    else:
+        # Get initial log content
+        try:
+            with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+                log_content = f.read().strip()
+        except UnicodeDecodeError:
+            # If UTF-8 fails, try with a more permissive encoding
+            try:
+                with open(log_file, 'r', encoding='latin-1') as f:
+                    log_content = f.read().strip()
+            except Exception as e:
+                print(f"{Colors.RED}Error reading log file: {e}{Colors.END}")
+                return
+        except Exception as e:
+            print(f"{Colors.RED}Error reading log file: {e}{Colors.END}")
+            return
+    
+    # If not running in background, just analyze once
+    if not background:
+        analyze_log_content(log_content, log_file, model)
+        return
+        
+    # Store last position to track new content
+    last_position = os.path.getsize(log_file)
+    
+    # Detect encoding for continued reading
+    encoding = 'utf-8'
+    try:
+        with open(log_file, 'r', encoding='utf-8') as f:
+            f.read(10)  # Test read a small portion
+    except UnicodeDecodeError:
+        encoding = 'latin-1'  # Fallback encoding
+    
+    # Function to run in a separate thread
+    def monitor_log():
+        nonlocal last_position
+        print(f"{Colors.GREEN}Starting continuous log monitoring for {Colors.BOLD}{log_file}{Colors.END}")
+        print(f"{Colors.YELLOW}Press Ctrl+C to stop monitoring.{Colors.END}")
+        
+        try:
+            while True:
+                # Check if file size has changed
+                try:
+                    current_size = os.path.getsize(log_file)
+                    
+                    if current_size > last_position:
+                        # Read only the new content
+                        with open(log_file, 'r', encoding=encoding, errors='replace' if encoding == 'utf-8' else None) as f:
+                            f.seek(last_position)
+                            new_content = f.read()
+                        
+                        if new_content:
+                            print(f"\n{Colors.CYAN}New log entries detected at {datetime.now().strftime('%H:%M:%S')}:{Colors.END}")
+                            print(f"{Colors.YELLOW}" + "-" * 40 + f"{Colors.END}")
+                            print(new_content)
+                            print(f"{Colors.YELLOW}" + "-" * 40 + f"{Colors.END}")
+                            
+                            # Analyze the new content
+                            analyze_log_content(new_content, log_file, model)
+                        
+                        # Update position
+                        last_position = current_size
+                except FileNotFoundError:
+                    print(f"\n{Colors.RED}Error: Log file {log_file} no longer exists.{Colors.END}")
+                    break
+                except PermissionError:
+                    print(f"\n{Colors.RED}Error: Permission denied when reading {log_file}.{Colors.END}")
+                    time.sleep(5)  # Wait longer before retrying on permissions issues
+                    continue
+                except Exception as e:
+                    print(f"\n{Colors.RED}Error reading log file: {e}{Colors.END}")
+                    time.sleep(2)
+                    continue
+                
+                # Wait before checking again
+                time.sleep(1)
+                
+        except KeyboardInterrupt:
+            print(f"\n{Colors.YELLOW}Stopped monitoring log file.{Colors.END}")
+        except Exception as e:
+            print(f"\n{Colors.RED}Error monitoring log file: {e}{Colors.END}")
+    
+    # Start monitoring in a separate thread
+    monitor_thread = threading.Thread(target=monitor_log)
+    monitor_thread.daemon = True  # This will make the thread exit when the main program exits
+    monitor_thread.start()
+    
+    # Keep the main thread alive
+    try:
+        while monitor_thread.is_alive():
+            monitor_thread.join(1)
+    except KeyboardInterrupt:
+        print(f"\n{Colors.YELLOW}Stopped log analysis.{Colors.END}")
+
+def analyze_log_content(log_content: str, log_file: str, model: str = DEFAULT_MODEL) -> None:
+    """
+    Analyze log content using AI.
+    
+    Args:
+        log_content: The log content to analyze
+        log_file: Path to the log file (for context)
+        model: The model to use for analysis
+    """
+    # If content is too large, take the last 1000 lines
+    lines = log_content.splitlines()
+    if len(lines) > 1000:
+        log_content = '\n'.join(lines[-1000:])
+        print(f"{Colors.YELLOW}Log content is large. Analyzing only the last 1000 lines.{Colors.END}")
+    
+    system_prompt = """You are a log analysis expert. Analyze the given log content and provide:
+1. A summary of what the log shows
+2. Any errors or warnings that should be addressed
+3. Patterns or trends in the log
+
+Be concise but thorough. Focus on actionable information."""
+
+    formatted_prompt = f"""Please analyze this log from {log_file}:
+
+```
+{log_content}
+```
+
+What does this log show? Are there any errors or patterns to be concerned about?"""
+    
+    # Get available models for fallback
+    available_models = []
+    try:
+        available_models = list_models()
+    except:
+        pass
+        
+    # Try with retries for network resilience
+    max_retries = 3
+    retry_delay = 2  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            # Prepare the request payload
+            payload = {
+                "model": model,
+                "prompt": formatted_prompt,
+                "system": system_prompt,
+                "stream": False,
+                "temperature": 0.2,
+            }
+            
+            if attempt > 0:
+                print(f"{Colors.YELLOW}Retry attempt {attempt+1}/{max_retries}...{Colors.END}")
+            else:
+                print(f"{Colors.BLUE}Analyzing logs with {Colors.BOLD}{model}{Colors.END}{Colors.BLUE}...{Colors.END}")
+            
+            # Make the API request with timeout
+            response = requests.post(f"{OLLAMA_API}/generate", json=payload, timeout=REQUEST_TIMEOUT)
+            response.raise_for_status()
+            result = response.json()
+            
+            # Extract the analysis from the response
+            analysis = result.get("response", "").strip()
+            
+            print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Log Analysis:{Colors.END}")
+            print(f"{Colors.CYAN}{analysis}{Colors.END}")
+            
+            return  # Success, exit the function
+            
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                print(f"{Colors.YELLOW}Request timed out. Retrying in {retry_delay} seconds...{Colors.END}")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            else:
+                print(f"{Colors.RED}Error: Log analysis timed out after {REQUEST_TIMEOUT} seconds.{Colors.END}")
+                
+                # Try fallback if the original model isn't available
+                if available_models and model != DEFAULT_MODEL and DEFAULT_MODEL in available_models:
+                    print(f"{Colors.YELLOW}Trying with fallback model {DEFAULT_MODEL}...{Colors.END}")
+                    try:
+                        # Use the default model as fallback
+                        payload["model"] = DEFAULT_MODEL
+                        response = requests.post(f"{OLLAMA_API}/generate", json=payload, timeout=REQUEST_TIMEOUT)
+                        response.raise_for_status()
+                        result = response.json()
+                        analysis = result.get("response", "").strip()
+                        if analysis:
+                            print(f"{Colors.GREEN}Successfully analyzed logs with fallback model.{Colors.END}")
+                            print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Log Analysis:{Colors.END}")
+                            print(f"{Colors.CYAN}{analysis}{Colors.END}")
+                            return
+                    except:
+                        # Fallback failed as well
+                        pass
+                        
+                print(f"{Colors.YELLOW}The log file might be too large or complex. Try analyzing a smaller section.{Colors.END}")
+                
+        except requests.exceptions.ConnectionError:
+            if attempt < max_retries - 1:
+                print(f"{Colors.YELLOW}Connection error. Retrying in {retry_delay} seconds...{Colors.END}")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            else:
+                print(f"{Colors.RED}Error: Could not connect to Ollama API after {max_retries} attempts.{Colors.END}")
+                print(f"{Colors.YELLOW}Make sure Ollama is running with 'ollama serve'{Colors.END}", file=sys.stderr)
+                
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1:
+                print(f"{Colors.YELLOW}Request error: {e}. Retrying in {retry_delay} seconds...{Colors.END}")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            else:
+                print(f"{Colors.RED}Error connecting to Ollama API: {e}{Colors.END}")
+                
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"{Colors.YELLOW}Unexpected error: {e}. Retrying in {retry_delay} seconds...{Colors.END}")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            else:
+                print(f"{Colors.RED}Error analyzing log content: {e}{Colors.END}")
+
+def read_large_file(file_path: str, chunk_size: int = 1024 * 1024) -> str:
+    """
+    Read a large file in chunks with user confirmation between chunks.
+    
+    Args:
+        file_path: Path to the file to read
+        chunk_size: Size of each chunk in bytes (default: 1 MB)
+        
+    Returns:
+        The content of the file or a portion of it
+    """
+    file_size = os.path.getsize(file_path)
+    chunks = file_size // chunk_size + (1 if file_size % chunk_size > 0 else 0)
+    
+    if chunks <= 1:
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                return f.read()
+        except UnicodeDecodeError:
+            # If UTF-8 fails, try with a more permissive encoding
+            try:
+                with open(file_path, 'r', encoding='latin-1') as f:
+                    return f.read()
+            except Exception as e:
+                print(f"{Colors.RED}Error reading file: {e}{Colors.END}")
+                return ""
+            
+    print(f"{Colors.YELLOW}File is {file_size // (1024*1024)} MB and will be read in {chunks} chunks.{Colors.END}")
+    
+    # Options for reading
+    print(f"\n{Colors.GREEN}How would you like to read this file?{Colors.END}")
+    print(f"1. {Colors.BOLD}First chunk{Colors.END} (beginning of file)")
+    print(f"2. {Colors.BOLD}Last chunk{Colors.END} (end of file)")
+    print(f"3. {Colors.BOLD}Interactive{Colors.END} (navigate through chunks)")
+    print(f"4. {Colors.BOLD}Cancel{Colors.END}")
+    
+    choice = input(f"\n{Colors.GREEN}Enter choice (1-4): {Colors.END}")
+    
+    if choice == '1':
+        # Read first chunk
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                return f.read(chunk_size)
+        except UnicodeDecodeError:
+            # If UTF-8 fails, try with a more permissive encoding
+            try:
+                with open(file_path, 'r', encoding='latin-1') as f:
+                    return f.read(chunk_size)
+            except Exception as e:
+                print(f"{Colors.RED}Error reading file: {e}{Colors.END}")
+                return ""
+    elif choice == '2':
+        # Read last chunk
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                f.seek(max(0, file_size - chunk_size))
+                # Skip partial line
+                f.readline()
+                return f.read()
+        except UnicodeDecodeError:
+            # If UTF-8 fails, try with a more permissive encoding
+            try:
+                with open(file_path, 'r', encoding='latin-1') as f:
+                    f.seek(max(0, file_size - chunk_size))
+                    # Skip partial line
+                    f.readline()
+                    return f.read()
+            except Exception as e:
+                print(f"{Colors.RED}Error reading file: {e}{Colors.END}")
+                return ""
+    elif choice == '3':
+        # Interactive mode
+        current_chunk = 0
+        content = ""
+        
+        # Determine the encoding to use
+        encoding = 'utf-8'
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                f.read(10)  # Test read a small portion
+        except UnicodeDecodeError:
+            encoding = 'latin-1'  # Fallback encoding
+            
+        try:
+            with open(file_path, 'r', encoding=encoding, errors='replace' if encoding == 'utf-8' else None) as f:
+                while True:
+                    f.seek(current_chunk * chunk_size)
+                    if current_chunk > 0:
+                        # Skip partial line
+                        f.readline()
+                    
+                    chunk_content = f.read(chunk_size)
+                    if not chunk_content:
+                        break
+                        
+                    print(f"\n{Colors.CYAN}Showing chunk {current_chunk + 1} of {chunks}{Colors.END}")
+                    print(f"{Colors.YELLOW}" + "-" * 40 + f"{Colors.END}")
+                    
+                    # Show a preview
+                    lines = chunk_content.splitlines()
+                    preview_lines = min(10, len(lines))
+                    for i in range(preview_lines):
+                        line = lines[i][:120] + ('...' if len(lines[i]) > 120 else '')
+                        # Remove or replace control characters that could mess up display
+                        line = ''.join(c if c.isprintable() or c.isspace() else '?' for c in line)
+                        print(line)
+                    if len(lines) > preview_lines:
+                        print(f"{Colors.YELLOW}... ({len(lines) - preview_lines} more lines) ...{Colors.END}")
+                    
+                    print(f"{Colors.YELLOW}" + "-" * 40 + f"{Colors.END}")
+                    
+                    print(f"\n{Colors.GREEN}Navigation:{Colors.END}")
+                    print(f"n: {Colors.BOLD}Next chunk{Colors.END}")
+                    print(f"p: {Colors.BOLD}Previous chunk{Colors.END}")
+                    print(f"s: {Colors.BOLD}Select this chunk{Colors.END}")
+                    print(f"a: {Colors.BOLD}Select all remaining chunks{Colors.END}")
+                    print(f"q: {Colors.BOLD}Quit{Colors.END}")
+                    
+                    nav = input(f"\n{Colors.GREEN}Enter choice: {Colors.END}").lower()
+                    
+                    if nav == 'n':
+                        current_chunk = min(current_chunk + 1, chunks - 1)
+                    elif nav == 'p':
+                        current_chunk = max(current_chunk - 1, 0)
+                    elif nav == 's':
+                        content = chunk_content
+                        break
+                    elif nav == 'a':
+                        # Read from current position to end
+                        f.seek(current_chunk * chunk_size)
+                        if current_chunk > 0:
+                            # Skip partial line
+                            f.readline()
+                        content = f.read()
+                        break
+                    elif nav == 'q':
+                        print(f"{Colors.YELLOW}Operation cancelled.{Colors.END}")
+                        return ""
+                        
+                return content
+        except Exception as e:
+            print(f"{Colors.RED}Error reading file: {e}{Colors.END}")
+            return ""
+    else:
+        print(f"{Colors.YELLOW}Operation cancelled.{Colors.END}")
+        return ""
+
+def find_log_files() -> List[str]:
+    """
+    Find log files in common locations in the system.
+    
+    Returns:
+        List of paths to log files
+    """
+    # Check if we have a valid cache
+    if os.path.exists(LOG_CACHE_FILE):
+        try:
+            with open(LOG_CACHE_FILE, 'r') as f:
+                cache_data = json.load(f)
+                cache_time = cache_data.get('timestamp', 0)
+                log_files = cache_data.get('log_files', [])
+                
+                # If cache is still valid (not expired)
+                if time.time() - cache_time < LOG_CACHE_EXPIRY:
+                    print(f"{Colors.BLUE}Using cached log file list.{Colors.END}")
+                    
+                    # Include favorite logs from config (in case they were added after caching)
+                    config = load_config()
+                    favorite_logs = config.get('favorite_logs', [])
+                    for log in favorite_logs:
+                        if os.path.exists(log) and os.path.isfile(log) and os.access(log, os.R_OK):
+                            if log not in log_files:
+                                log_files.append(log)
+                                
+                    return log_files
+        except (json.JSONDecodeError, IOError):
+            # Cache file is invalid, continue with normal search
+            pass
+            
+    # Common log locations
+    log_locations = [
+        "/var/log/",
+        "/var/log/syslog",
+        "/var/log/auth.log",
+        "/var/log/dmesg",
+        "/var/log/kern.log",
+        "/var/log/apache2/",
+        "/var/log/nginx/",
+        "/var/log/mysql/",
+        "/var/log/postgresql/",
+        "~/.local/share/",
+        "/opt/",
+        "/tmp/",
+    ]
+    
+    log_files = []
+    
+    # Function to check if a file is a log file
+    def is_log_file(filename):
+        log_extensions = ['.log', '.logs', '.err', '.error', '.out', '.output', '.debug']
+        return (any(filename.endswith(ext) for ext in log_extensions) or 
+                'log' in filename.lower() or 
+                'debug' in filename.lower() or 
+                'error' in filename.lower())
+    
+    # Expand home directory
+    log_locations = [os.path.expanduser(loc) for loc in log_locations]
+    
+    print(f"{Colors.BLUE}Searching for log files...{Colors.END}")
+    
+    try:
+        # First check specific log files
+        for location in log_locations:
+            if os.path.isfile(location) and os.access(location, os.R_OK):
+                log_files.append(location)
+            elif os.path.isdir(location) and os.access(location, os.R_OK):
+                # For directories, find log files inside
+                for root, dirs, files in os.walk(location, topdown=True, followlinks=False):
+                    # Limit depth to avoid searching too deep
+                    if root.count(os.sep) - location.count(os.sep) > 2:
+                        continue
+                        
+                    # Add log files
+                    for file in files:
+                        if is_log_file(file) and os.access(os.path.join(root, file), os.R_OK):
+                            log_files.append(os.path.join(root, file))
+                            
+                    # Limit to max 100 files to avoid overloading
+                    if len(log_files) > 100:
+                        break
+        
+        # Add any running service logs from systemd
+        systemd_logs = []
+        try:
+            systemd_logs = subprocess.check_output(["systemctl", "list-units", "--type=service", "--state=running", "--no-pager"], 
+                                               stderr=subprocess.DEVNULL,
+                                               universal_newlines=True,
+                                               timeout=5)  # Add timeout
+            
+            # Extract service names
+            service_names = []
+            for line in systemd_logs.splitlines():
+                if ".service" in line and "running" in line:
+                    parts = line.split()
+                    for part in parts:
+                        if part.endswith(".service"):
+                            service_names.append(part)
+            
+            # Get journalctl logs for running services
+            for service in service_names[:10]:  # Limit to top 10 services
+                log_files.append(f"journalctl:{service}")
+        except (subprocess.SubprocessError, FileNotFoundError):
+            # Systemd might not be available
+            pass
+        except subprocess.TimeoutExpired:
+            print(f"{Colors.YELLOW}Systemd service enumeration timed out, skipping service logs.{Colors.END}")
+        
+        # Include favorite logs from config
+        config = load_config()
+        favorite_logs = config.get('favorite_logs', [])
+        for log in favorite_logs:
+            if os.path.exists(log) and os.path.isfile(log) and os.access(log, os.R_OK):
+                if log not in log_files:
+                    log_files.append(log)
+        
+        # Cache the results
+        try:
+            with open(LOG_CACHE_FILE, 'w') as f:
+                json.dump({
+                    'timestamp': time.time(),
+                    'log_files': sorted(set(log_files))
+                }, f)
+        except (IOError, OSError) as e:
+            print(f"{Colors.YELLOW}Could not cache log file list: {e}{Colors.END}")
+        
+        return sorted(set(log_files))  # Remove duplicates
+        
+    except Exception as e:
+        print(f"{Colors.RED}Error searching for log files: {e}{Colors.END}")
+        return []
+
+def display_log_selection(log_files: List[str]) -> Optional[str]:
+    """
+    Display a menu of log files and let the user select one.
+    
+    Args:
+        log_files: List of log file paths
+        
+    Returns:
+        Selected log file path or None if cancelled
+    """
+    if not log_files:
+        print(f"{Colors.YELLOW}No log files found.{Colors.END}")
+        return None
+    
+    print(f"\n{Colors.GREEN}{Colors.BOLD}Found {len(log_files)} log files:{Colors.END}")
+    
+    # Group logs by directory for better organization
+    logs_by_dir = {}
+    for log_file in log_files:
+        if log_file.startswith("journalctl:"):
+            dir_name = "Systemd Services"
+        else:
+            dir_name = os.path.dirname(log_file)
+            
+        if dir_name not in logs_by_dir:
+            logs_by_dir[dir_name] = []
+            
+        logs_by_dir[dir_name].append(log_file)
+    
+    # Display logs grouped by directory
+    index = 1
+    file_indices = {}
+    
+    for dir_name, files in sorted(logs_by_dir.items()):
+        print(f"\n{Colors.CYAN}{dir_name}:{Colors.END}")
+        for file in sorted(files):
+            base_name = os.path.basename(file) if not file.startswith("journalctl:") else file[11:]
+            print(f"  {Colors.BOLD}{index}{Colors.END}. {base_name}")
+            file_indices[index] = file
+            index += 1
+    
+    while True:
+        try:
+            choice = input(f"\n{Colors.GREEN}Enter number to select a log file (or q to cancel): {Colors.END}")
+            
+            if choice.lower() in ['q', 'quit', 'exit']:
+                return None
+                
+            choice = int(choice)
+            if choice in file_indices:
+                return file_indices[choice]
+            else:
+                print(f"{Colors.YELLOW}Invalid selection. Please try again.{Colors.END}")
+        except ValueError:
+            print(f"{Colors.YELLOW}Please enter a number or 'q' to cancel.{Colors.END}")
+        except KeyboardInterrupt:
+            print(f"\n{Colors.YELLOW}Operation cancelled.{Colors.END}")
+            return None
+
+def handle_log_analysis(model: str = DEFAULT_MODEL, file_path: str = None) -> None:
+    """
+    Main entry point for log analysis feature.
+    
+    Args:
+        model: The model to use for analysis
+        file_path: Optional path to a specific file to analyze
+    """
+    print(f"{Colors.GREEN}Starting log analysis tool...{Colors.END}")
+    
+    # If a specific file is provided, analyze it directly
+    if file_path:
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            # Ask if user wants continuous monitoring
+            monitor = input(f"{Colors.GREEN}Monitor this file continuously? (y/n): {Colors.END}").lower()
+            
+            # Analyze the specified file
+            analyze_log_file(file_path, model, monitor in ['y', 'yes'])
+        else:
+            print(f"{Colors.RED}Error: File {file_path} does not exist or is not accessible.{Colors.END}")
+        return
+    
+    # Find log files
+    log_files = find_log_files()
+    
+    if not log_files:
+        print(f"{Colors.YELLOW}No accessible log files found on the system.{Colors.END}")
+        return
+    
+    # Let user select a log file
+    selected_log = display_log_selection(log_files)
+    
+    if not selected_log:
+        return
+        
+    # Special handling for journalctl entries
+    if selected_log.startswith("journalctl:"):
+        service_name = selected_log[11:]
+        print(f"{Colors.GREEN}Fetching logs for service: {Colors.BOLD}{service_name}{Colors.END}")
+        
+        try:
+            # Create a temporary file to store the logs
+            with tempfile.NamedTemporaryFile(delete=False, mode='w+') as temp_file:
+                # Get logs from journalctl
+                logs = subprocess.check_output(
+                    ["journalctl", "-u", service_name, "--no-pager", "-n", "1000"],
+                    stderr=subprocess.DEVNULL,
+                    universal_newlines=True
+                )
+                temp_file.write(logs)
+                temp_file_path = temp_file.name
+            
+            # Ask if user wants continuous monitoring
+            monitor = input(f"{Colors.GREEN}Monitor this service log continuously? (y/n): {Colors.END}").lower()
+            
+            # Analyze the log file
+            analyze_log_file(temp_file_path, model, monitor in ['y', 'yes'])
+            
+            # Clean up temp file if not in continuous mode
+            if monitor not in ['y', 'yes']:
+                try:
+                    os.unlink(temp_file_path)
+                except:
+                    pass
+                    
+        except subprocess.SubprocessError as e:
+            print(f"{Colors.RED}Error fetching service logs: {e}{Colors.END}")
+        except Exception as e:
+            print(f"{Colors.RED}Error: {e}{Colors.END}")
+            
+    else:
+        # Ask if user wants continuous monitoring
+        monitor = input(f"{Colors.GREEN}Monitor this log file continuously? (y/n): {Colors.END}").lower()
+        
+        # Analyze the selected log file
+        analyze_log_file(selected_log, model, monitor in ['y', 'yes'])
+
+def handle_log_selection(selected_log: str, model: str) -> None:
+    """
+    Handle a selected log file from the all-logs menu.
+    
+    Args:
+        selected_log: The selected log file path or journalctl service
+        model: The model to use for analysis
+    """
+    if not selected_log:
+        return
+        
+    # Ask if user wants to analyze or monitor the selected log
+    action = input(f"{Colors.GREEN}Do you want to (a)nalyze or (m)onitor this log? (a/m): {Colors.END}").lower()
+    is_monitor = action.startswith('m')
+    
+    # Special handling for journalctl entries
+    if selected_log.startswith("journalctl:"):
+        service_name = selected_log[11:]
+        print(f"{Colors.GREEN}Fetching logs for service: {Colors.BOLD}{service_name}{Colors.END}")
+        
+        try:
+            # Create a temporary file to store the logs
+            with tempfile.NamedTemporaryFile(delete=False, mode='w+') as temp_file:
+                try:
+                    # Get logs from journalctl with timeout
+                    logs = subprocess.check_output(
+                        ["journalctl", "-u", service_name, "--no-pager", "-n", "1000"],
+                        stderr=subprocess.DEVNULL,
+                        universal_newlines=True,
+                        timeout=10  # Add timeout of 10 seconds
+                    )
+                    temp_file.write(logs)
+                    temp_file_path = temp_file.name
+                except subprocess.TimeoutExpired:
+                    print(f"{Colors.RED}Error: journalctl command timed out.{Colors.END}")
+                    print(f"{Colors.YELLOW}The service logs might be too large or the system is busy.{Colors.END}")
+                    try:
+                        os.unlink(temp_file.name)
+                    except:
+                        pass
+                    return
+                except FileNotFoundError:
+                    print(f"{Colors.RED}Error: journalctl command not found.{Colors.END}")
+                    print(f"{Colors.YELLOW}This system might not use systemd or journalctl isn't installed.{Colors.END}")
+                    try:
+                        os.unlink(temp_file.name)
+                    except:
+                        pass
+                    return
+            
+            # Analyze the log file
+            analyze_log_file(temp_file_path, model, is_monitor)
+            
+            # Clean up temp file if not in continuous mode
+            if not is_monitor:
+                try:
+                    os.unlink(temp_file_path)
+                except:
+                    pass
+                    
+        except subprocess.SubprocessError as e:
+            print(f"{Colors.RED}Error fetching service logs: {e}{Colors.END}")
+        except Exception as e:
+            print(f"{Colors.RED}Error: {e}{Colors.END}")
+    else:
+        # Regular file
+        if os.path.exists(selected_log) and os.path.isfile(selected_log):
+            analyze_log_file(selected_log, model, is_monitor)
+        else:
+            print(f"{Colors.RED}Error: File {selected_log} does not exist or is not accessible.{Colors.END}")
+
+def load_config() -> Dict:
+    """
+    Load configuration from config file.
+    
+    Returns:
+        Dictionary with configuration options
+    """
+    config = {
+        'model': DEFAULT_MODEL,
+        'temperature': 0.2,
+        'auto_mode': False,
+        'analyze_errors': False,
+        'timeout': REQUEST_TIMEOUT,
+        'favorite_logs': [],
+    }
+    
+    if os.path.exists(CONFIG_FILE):
+        try:
+            parser = configparser.ConfigParser()
+            parser.read(CONFIG_FILE)
+            
+            if 'general' in parser:
+                if 'model' in parser['general']:
+                    config['model'] = parser['general']['model']
+                if 'temperature' in parser['general']:
+                    config['temperature'] = float(parser['general']['temperature'])
+                if 'auto_mode' in parser['general']:
+                    config['auto_mode'] = parser['general'].getboolean('auto_mode')
+                if 'analyze_errors' in parser['general']:
+                    config['analyze_errors'] = parser['general'].getboolean('analyze_errors')
+                if 'timeout' in parser['general']:
+                    config['timeout'] = int(parser['general']['timeout'])
+            
+            if 'logs' in parser and 'favorites' in parser['logs']:
+                config['favorite_logs'] = parser['logs']['favorites'].split(',')
+                
+        except (configparser.Error, ValueError) as e:
+            print(f"{Colors.YELLOW}Warning: Could not parse config file: {e}{Colors.END}")
+    
+    return config
+
+def save_config(config: Dict) -> None:
+    """
+    Save configuration to config file.
+    
+    Args:
+        config: Dictionary with configuration options
+    """
+    try:
+        parser = configparser.ConfigParser()
+        
+        parser['general'] = {
+            'model': config['model'],
+            'temperature': str(config['temperature']),
+            'auto_mode': str(config['auto_mode']),
+            'analyze_errors': str(config['analyze_errors']),
+            'timeout': str(config['timeout']),
+        }
+        
+        parser['logs'] = {
+            'favorites': ','.join(config['favorite_logs'])
+        }
+        
+        os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+        with open(CONFIG_FILE, 'w') as f:
+            parser.write(f)
+            
+    except (IOError, OSError) as e:
+        print(f"{Colors.YELLOW}Warning: Could not save config file: {e}{Colors.END}")
+
+def main() -> None:
+    """
+    Main entry point for the script.
+    """
+    # Global variable declarations must come first
+    global REQUEST_TIMEOUT
+    
+    # Load configuration
+    config = load_config()
+    
+    # Set default values from config
+    REQUEST_TIMEOUT = config.get('timeout', REQUEST_TIMEOUT)
+    
+    # Create a custom formatter for better help message formatting
+    class CustomHelpFormatter(argparse.HelpFormatter):
+        def _format_action_invocation(self, action):
+            if not action.option_strings or action.nargs == 0:
+                return super()._format_action_invocation(action)
+            
+            default = self._get_default_metavar_for_optional(action)
+            args_string = self._format_args(action, default)
+            
+            # Only display long option with metavar
+            if args_string:
+                return f"{action.option_strings[-1]} {args_string}"
+            else:
+                return f"{action.option_strings[-1]}"
+        
+        def _split_lines(self, text, width):
+            return textwrap.wrap(text, width)
+    
+    parser = argparse.ArgumentParser(
+        description=f"{Colors.BOLD}Generate and execute shell commands using AI models via Ollama.{Colors.END}",
+        formatter_class=lambda prog: CustomHelpFormatter(prog, max_help_position=35, width=100),
+        add_help=False  # We'll add our own help
+    )
+    
+    # Add a custom help argument
+    parser.add_argument(
+        '--help', '-h', 
+        action='store_true',
+        help='Show this help message'
+    )
+    
+    # Main command arguments
+    prompt_group = parser.add_argument_group(f'{Colors.GREEN}Main Arguments{Colors.END}')
+    prompt_group.add_argument(
+        "prompt",
+        nargs="?",
+        help="Natural language description of the command you want"
+    )
+    
+    # Model selection
+    model_group = parser.add_argument_group(f'{Colors.GREEN}Model Selection{Colors.END}')
+    model_group.add_argument(
+        "--model", "-m",
+        default=config.get('model', DEFAULT_MODEL),
+        metavar="MODEL",
+        help=f"Model to use (default: {config.get('model', DEFAULT_MODEL)})"
+    )
+    
+    model_group.add_argument(
+        "--list", "-l",
+        action="store_true",
+        help="List available models and exit"
+    )
+    
+    model_group.add_argument(
+        "--list-models",
+        action="store_true",
+        help="Same as --list, shows available models"
+    )
+    
+    # Execution options
+    exec_group = parser.add_argument_group(f'{Colors.GREEN}Execution Options{Colors.END}')
+    exec_group.add_argument(
+        "--execute", "-e",
+        action="store_true",
+        help="Execute the generated command after confirmation"
+    )
+    
+    exec_group.add_argument(
+        "--yes", "-y",
+        action="store_true",
+        help="Use simplified confirmation (just press Enter to execute)"
+    )
+    
+    exec_group.add_argument(
+        "--dry-run", "-d",
+        action="store_true",
+        help="Just show the command without executing"
+    )
+    
+    exec_group.add_argument(
+        "--analyze", "-a",
+        action="store_true",
+        help="Analyze errors if command execution fails"
+    )
+    
+    exec_group.add_argument(
+        "--auto", "-A",
+        action="store_true",
+        help="Auto mode: automatically generate, execute, and fix errors without confirmation"
+    )
+    
+    exec_group.add_argument(
+        "--max-attempts",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Maximum number of fix attempts in auto mode (default: 3)"
+    )
+    
+    # Shell options
+    shell_group = parser.add_argument_group(f'{Colors.GREEN}Shell Options{Colors.END}')
+    shell_group.add_argument(
+        "--shell", "-s",
+        action="store_true",
+        help="Start an interactive shell"
+    )
+    
+    shell_group.add_argument(
+        "--history",
+        action="store_true",
+        help="Show command history"
+    )
+    
+    shell_group.add_argument(
+        "--history-count",
+        type=int,
+        default=20,
+        metavar="N",
+        help="Number of history entries to show (default: 20)"
+    )
+    
+    # Generation options
+    gen_group = parser.add_argument_group(f'{Colors.GREEN}Generation Options{Colors.END}')
+    gen_group.add_argument(
+        "--temperature", "-t",
+        type=float,
+        default=config.get('temperature', 0.2),
+        metavar="TEMP",
+        help=f"Temperature for generation (0.0-1.0, higher=more creative, default: {config.get('temperature', 0.2)})"
+    )
+    
+    # Output options
+    output_group = parser.add_argument_group(f'{Colors.GREEN}Output Options{Colors.END}')
+    output_group.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Disable colored output"
+    )
+    
+    output_group.add_argument(
+        "--examples",
+        action="store_true",
+        help="Show detailed usage examples"
+    )
+    
+    output_group.add_argument(
+        "--save-output",
+        metavar="FILE",
+        help="Save command output to a file"
+    )
+    
+    # Add logs command
+    log_group = parser.add_argument_group(f'{Colors.GREEN}Log Analysis{Colors.END}')
+    log_group.add_argument(
+        "--logs",
+        action="store_true",
+        help="Find and analyze system log files"
+    )
+    
+    log_group.add_argument(
+        "--all-logs",
+        action="store_true",
+        help="Show all available log files in a single list"
+    )
+    
+    log_group.add_argument(
+        "--analyze-file",
+        metavar="FILE",
+        help="Analyze a specific file"
+    )
+    
+    log_group.add_argument(
+        "--monitor",
+        metavar="FILE",
+        help="Monitor a specific file continuously with AI analysis"
+    )
+    
+    # Add config options
+    config_group = parser.add_argument_group(f'{Colors.GREEN}Configuration{Colors.END}')
+    config_group.add_argument(
+        "--save-config",
+        action="store_true",
+        help="Save current settings as default configuration"
+    )
+    
+    config_group.add_argument(
+        "--reset-config",
+        action="store_true",
+        help="Reset configuration to defaults"
+    )
+    
+    config_group.add_argument(
+        "--config-path",
+        action="store_true",
+        help="Show the path to the configuration file"
+    )
+    
+    config_group.add_argument(
+        "--set-timeout",
+        type=int,
+        metavar="SECONDS",
+        help="Set API request timeout in seconds"
+    )
+    
+    config_group.add_argument(
+        "--add-favorite-log",
+        metavar="PATH",
+        help="Add a log file to favorites"
+    )
+    
+    # Add history search option
+    shell_group.add_argument(
+        "--history-search",
+        metavar="TERM",
+        help="Search command history for a specific term"
+    )
+    
+    # Parse the arguments
+    args = parser.parse_args()
+    
+    # Setup for all modes
+    if args.no_color:
+        disable_colors()
+    
+    # If just requesting help or examples
+    if args.help:
+        print_cool_header()
+        parser.print_help()
+        print("\nFor more detailed examples, use --examples")
+        return
+        
+    if args.examples:
+        print_cool_header()
+        print_examples()
+        return
+        
+    # If listing models
+    if args.list or args.list_models:
+        print_cool_header()
+        list_models()
+        return
+        
+    # If showing history
+    if args.history:
+        show_history(args.history_count)
+        return
+        
+    # If starting interactive shell
+    if args.shell:
+        run_interactive_shell(args.model, args.temperature, args.analyze, args.auto, args.max_attempts)
+        return
+        
+    # If all-logs mode is requested, show all log files without analyzing
+    if args.all_logs:
+        log_files = find_log_files()
+        if log_files:
+            print(f"{Colors.GREEN}Found {len(log_files)} log files:{Colors.END}")
+            selected_log = display_log_selection(log_files)
+            if selected_log:
+                handle_log_selection(selected_log, args.model)
+        else:
+            print(f"{Colors.YELLOW}No accessible log files found on the system.{Colors.END}")
+        return
+        
+    # If monitoring a specific file
+    if args.monitor:
+        handle_log_analysis(args.model, args.monitor)
+        return
+        
+    # If analyzing a specific file
+    if args.analyze_file:
+        analyze_log_file(args.analyze_file, args.model, False)
+        return
+    
+    # If logs mode is requested, handle log analysis
+    if args.logs:
+        handle_log_analysis(args.model)
+        return
+        
+    # Ensure a prompt is provided
+    if not args.prompt:
+        print_cool_header()
+        parser.print_help()
+        print(f"\n{Colors.YELLOW}💡 Tip: Try some examples:{Colors.END}")
+        print(f"  {Colors.BOLD}qcmd{Colors.END} \"list all files in the current directory\"")
+        print(f"  {Colors.BOLD}qcmd -e{Colors.END} \"find large log files\"")
+        print(f"  {Colors.BOLD}qcmd -A{Colors.END} \"find Python files modified today\" {Colors.GREEN}(auto mode){Colors.END}")
+        print(f"  {Colors.BOLD}qcmd -s{Colors.END} {Colors.GREEN}(start interactive shell){Colors.END}")
+        print(f"\n{Colors.BLUE}For more examples, use: {Colors.BOLD}qcmd --examples{Colors.END}")
+        return
+    
+    # Save prompt to history
+    save_to_history(args.prompt)
+    
+    # Auto mode: generate, execute, and fix automatically
+    if args.auto:
+        auto_mode(args.prompt, args.model, args.max_attempts, args.temperature)
+        return
+    
+    # Generate the command
+    print(f"{Colors.GREEN}Generating command for: {Colors.BOLD}{args.prompt}{Colors.END}")
+    command = generate_command(args.prompt, args.model, args.temperature)
+    
+    # Display the generated command
+    print(f"\n{Colors.CYAN}Generated Command: {Colors.BOLD}{command}{Colors.END}")
+    
+    # Handle execution based on flags
+    if args.dry_run:
+        # Just show the command without executing
+        print(f"\n{Colors.YELLOW}Dry run - command not executed{Colors.END}")
+    elif args.yes:
+        # Quick confirmation before execution
+        print(f"\n{Colors.GREEN}About to execute: {Colors.BOLD}{command}{Colors.END}")
+        response = input(f"{Colors.GREEN}Press Enter to continue or Ctrl+C to cancel...{Colors.END}")
+        returncode, output = execute_command(command, args.analyze, args.model)
+        
+        # Save output if requested
+        if args.save_output and output:
+            try:
+                with open(args.save_output, 'w') as f:
+                    f.write(output)
+                print(f"\n{Colors.GREEN}Output saved to: {Colors.BOLD}{args.save_output}{Colors.END}")
+            except Exception as e:
+                print(f"\n{Colors.RED}Failed to save output: {e}{Colors.END}")
+                
+        # Analyze errors if requested and command failed
+        if args.analyze and returncode != 0:
+            print(f"\n{Colors.BLUE}Analyzing error...{Colors.END}")
+            analysis = analyze_error(output, command, args.model)
+            
+            print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Error Analysis:{Colors.END}")
+            print(f"{Colors.CYAN}{analysis}{Colors.END}")
+            
+            print(f"\n{Colors.GREEN}Would you like to fix this error and try again? (y/n): {Colors.END}", end="")
+            if input().lower() in ["y", "yes"]:
+                fixed_command = fix_command(command, output, args.model)
+                print(f"\n{Colors.CYAN}Fixed Command: {Colors.BOLD}{fixed_command}{Colors.END}")
+                
+                print(f"\n{Colors.GREEN}Execute this fixed command? (y/n): {Colors.END}", end="")
+                if input().lower() in ["y", "yes"]:
+                    execute_command(fixed_command, False, args.model)
+    elif args.execute:
+        # Execute with confirmation
+        response = input(f"\n{Colors.GREEN}Do you want to execute this command? (y/n): {Colors.END}").lower()
+        if response in ["y", "yes"]:
+            returncode, output = execute_command(command, args.analyze, args.model)
+            
+            # Save output if requested
+            if args.save_output and output:
+                try:
+                    with open(args.save_output, 'w') as f:
+                        f.write(output)
+                    print(f"\n{Colors.GREEN}Output saved to: {Colors.BOLD}{args.save_output}{Colors.END}")
+                except Exception as e:
+                    print(f"\n{Colors.RED}Failed to save output: {e}{Colors.END}")
+                    
+            # Analyze errors if requested and command failed
+            if args.analyze and returncode != 0:
+                print(f"\n{Colors.BLUE}Analyzing error...{Colors.END}")
+                analysis = analyze_error(output, command, args.model)
+                
+                print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Error Analysis:{Colors.END}")
+                print(f"{Colors.CYAN}{analysis}{Colors.END}")
+                
+                print(f"\n{Colors.GREEN}Would you like to fix this error and try again? (y/n): {Colors.END}", end="")
+                if input().lower() in ["y", "yes"]:
+                    fixed_command = fix_command(command, output, args.model)
+                    print(f"\n{Colors.CYAN}Fixed Command: {Colors.BOLD}{fixed_command}{Colors.END}")
+                    
+                    print(f"\n{Colors.GREEN}Execute this fixed command? (y/n): {Colors.END}", end="")
+                    if input().lower() in ["y", "yes"]:
+                        execute_command(fixed_command, False, args.model)
+        else:
+            print(f"{Colors.YELLOW}Command execution cancelled.{Colors.END}")
+    else:
+        # Just ask if user wants to execute
+        response = input(f"\n{Colors.GREEN}Do you want to execute this command? (y/n): {Colors.END}").lower()
+        if response in ["y", "yes"]:
+            returncode, output = execute_command(command, args.analyze, args.model)
+            
+            # Save output if requested
+            if args.save_output and output:
+                try:
+                    with open(args.save_output, 'w') as f:
+                        f.write(output)
+                    print(f"\n{Colors.GREEN}Output saved to: {Colors.BOLD}{args.save_output}{Colors.END}")
+                except Exception as e:
+                    print(f"\n{Colors.RED}Failed to save output: {e}{Colors.END}")
+                    
+            # Analyze errors if requested and command failed
+            if args.analyze and returncode != 0:
+                print(f"\n{Colors.BLUE}Analyzing error...{Colors.END}")
+                analysis = analyze_error(output, command, args.model)
+                
+                print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Error Analysis:{Colors.END}")
+                print(f"{Colors.CYAN}{analysis}{Colors.END}")
+                
+                print(f"\n{Colors.GREEN}Would you like to fix this error and try again? (y/n): {Colors.END}", end="")
+                if input().lower() in ["y", "yes"]:
+                    fixed_command = fix_command(command, output, args.model)
+                    print(f"\n{Colors.CYAN}Fixed Command: {Colors.BOLD}{fixed_command}{Colors.END}")
+                    
+                    print(f"\n{Colors.GREEN}Execute this fixed command? (y/n): {Colors.END}", end="")
+                    if input().lower() in ["y", "yes"]:
+                        execute_command(fixed_command, False, args.model)
+        else:
+            print(f"{Colors.YELLOW}Command execution cancelled.{Colors.END}")
+
+    # Configuration options
+    if args.config_path:
+        print(f"Configuration file path: {CONFIG_FILE}")
+        return
+        
+    if args.reset_config:
+        try:
+            if os.path.exists(CONFIG_FILE):
+                os.remove(CONFIG_FILE)
+                print(f"{Colors.GREEN}Configuration reset to defaults.{Colors.END}")
+            else:
+                print(f"{Colors.YELLOW}No configuration file found.{Colors.END}")
+        except OSError as e:
+            print(f"{Colors.RED}Error resetting configuration: {e}{Colors.END}")
+        return
+        
+    if args.save_config:
+        # Update config with current settings
+        config['model'] = args.model
+        config['temperature'] = args.temperature
+        config['auto_mode'] = args.auto
+        config['analyze_errors'] = args.analyze
+        if args.set_timeout:
+            config['timeout'] = args.set_timeout
+        
+        # Save the configuration
+        save_config(config)
+        print(f"{Colors.GREEN}Configuration saved to {CONFIG_FILE}{Colors.END}")
+        return
+        
+    if args.add_favorite_log:
+        if os.path.exists(args.add_favorite_log) and os.path.isfile(args.add_favorite_log):
+            if args.add_favorite_log not in config['favorite_logs']:
+                config['favorite_logs'].append(args.add_favorite_log)
+                save_config(config)
+                print(f"{Colors.GREEN}Added {args.add_favorite_log} to favorite logs.{Colors.END}")
+            else:
+                print(f"{Colors.YELLOW}This log is already in favorites.{Colors.END}")
+        else:
+            print(f"{Colors.RED}Error: File does not exist or is not accessible.{Colors.END}")
+        return
+        
+    if args.set_timeout:
+        config['timeout'] = args.set_timeout
+        REQUEST_TIMEOUT = args.set_timeout
+        save_config(config)
+        print(f"{Colors.GREEN}API request timeout set to {args.set_timeout} seconds.{Colors.END}")
+        
+    # Auto mode: generate, execute, and fix automatically
+    if args.auto:
+        auto_mode(args.prompt, args.model, args.max_attempts, args.temperature)
+        return
+    
+    # Generate the command
+    print(f"{Colors.GREEN}Generating command for: {Colors.BOLD}{args.prompt}{Colors.END}")
+    command = generate_command(args.prompt, args.model, args.temperature)
+    
+    # Display the generated command
+    print(f"\n{Colors.CYAN}Generated Command: {Colors.BOLD}{command}{Colors.END}")
+    
+    # Handle execution based on flags
+    if args.dry_run:
+        # Just show the command without executing
+        print(f"\n{Colors.YELLOW}Dry run - command not executed{Colors.END}")
+    elif args.yes:
+        # Quick confirmation before execution
+        print(f"\n{Colors.GREEN}About to execute: {Colors.BOLD}{command}{Colors.END}")
+        response = input(f"{Colors.GREEN}Press Enter to continue or Ctrl+C to cancel...{Colors.END}")
+        returncode, output = execute_command(command, args.analyze, args.model)
+        
+        # Save output if requested
+        if args.save_output and output:
+            try:
+                with open(args.save_output, 'w') as f:
+                    f.write(output)
+                print(f"\n{Colors.GREEN}Output saved to: {Colors.BOLD}{args.save_output}{Colors.END}")
+            except Exception as e:
+                print(f"\n{Colors.RED}Failed to save output: {e}{Colors.END}")
+                
+        # Analyze errors if requested and command failed
+        if args.analyze and returncode != 0:
+            print(f"\n{Colors.BLUE}Analyzing error...{Colors.END}")
+            analysis = analyze_error(output, command, args.model)
+            
+            print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Error Analysis:{Colors.END}")
+            print(f"{Colors.CYAN}{analysis}{Colors.END}")
+            
+            print(f"\n{Colors.GREEN}Would you like to fix this error and try again? (y/n): {Colors.END}", end="")
+            if input().lower() in ["y", "yes"]:
+                fixed_command = fix_command(command, output, args.model)
+                print(f"\n{Colors.CYAN}Fixed Command: {Colors.BOLD}{fixed_command}{Colors.END}")
+                
+                print(f"\n{Colors.GREEN}Execute this fixed command? (y/n): {Colors.END}", end="")
+                if input().lower() in ["y", "yes"]:
+                    execute_command(fixed_command, False, args.model)
+    elif args.execute:
+        # Execute with confirmation
+        response = input(f"\n{Colors.GREEN}Do you want to execute this command? (y/n): {Colors.END}").lower()
+        if response in ["y", "yes"]:
+            returncode, output = execute_command(command, args.analyze, args.model)
+            
+            # Save output if requested
+            if args.save_output and output:
+                try:
+                    with open(args.save_output, 'w') as f:
+                        f.write(output)
+                    print(f"\n{Colors.GREEN}Output saved to: {Colors.BOLD}{args.save_output}{Colors.END}")
+                except Exception as e:
+                    print(f"\n{Colors.RED}Failed to save output: {e}{Colors.END}")
+                    
+            # Analyze errors if requested and command failed
+            if args.analyze and returncode != 0:
+                print(f"\n{Colors.BLUE}Analyzing error...{Colors.END}")
+                analysis = analyze_error(output, command, args.model)
+                
+                print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Error Analysis:{Colors.END}")
+                print(f"{Colors.CYAN}{analysis}{Colors.END}")
+                
+                print(f"\n{Colors.GREEN}Would you like to fix this error and try again? (y/n): {Colors.END}", end="")
+                if input().lower() in ["y", "yes"]:
+                    fixed_command = fix_command(command, output, args.model)
+                    print(f"\n{Colors.CYAN}Fixed Command: {Colors.BOLD}{fixed_command}{Colors.END}")
+                    
+                    print(f"\n{Colors.GREEN}Execute this fixed command? (y/n): {Colors.END}", end="")
+                    if input().lower() in ["y", "yes"]:
+                        execute_command(fixed_command, False, args.model)
+        else:
+            print(f"{Colors.YELLOW}Command execution cancelled.{Colors.END}")
+    else:
+        # Just ask if user wants to execute
+        response = input(f"\n{Colors.GREEN}Do you want to execute this command? (y/n): {Colors.END}").lower()
+        if response in ["y", "yes"]:
+            returncode, output = execute_command(command, args.analyze, args.model)
+            
+            # Save output if requested
+            if args.save_output and output:
+                try:
+                    with open(args.save_output, 'w') as f:
+                        f.write(output)
+                    print(f"\n{Colors.GREEN}Output saved to: {Colors.BOLD}{args.save_output}{Colors.END}")
+                except Exception as e:
+                    print(f"\n{Colors.RED}Failed to save output: {e}{Colors.END}")
+                    
+            # Analyze errors if requested and command failed
+            if args.analyze and returncode != 0:
+                print(f"\n{Colors.BLUE}Analyzing error...{Colors.END}")
+                analysis = analyze_error(output, command, args.model)
+                
+                print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Error Analysis:{Colors.END}")
+                print(f"{Colors.CYAN}{analysis}{Colors.END}")
+                
+                print(f"\n{Colors.GREEN}Would you like to fix this error and try again? (y/n): {Colors.END}", end="")
+                if input().lower() in ["y", "yes"]:
+                    fixed_command = fix_command(command, output, args.model)
+                    print(f"\n{Colors.CYAN}Fixed Command: {Colors.BOLD}{fixed_command}{Colors.END}")
+                    
+                    print(f"\n{Colors.GREEN}Execute this fixed command? (y/n): {Colors.END}", end="")
+                    if input().lower() in ["y", "yes"]:
+                        execute_command(fixed_command, False, args.model)
+        else:
+            print(f"{Colors.YELLOW}Command execution cancelled.{Colors.END}")
+
+    # Configuration options
+    if args.config_path:
+        print(f"Configuration file path: {CONFIG_FILE}")
+        return
+        
+    if args.reset_config:
+        try:
+            if os.path.exists(CONFIG_FILE):
+                os.remove(CONFIG_FILE)
+                print(f"{Colors.GREEN}Configuration reset to defaults.{Colors.END}")
+            else:
+                print(f"{Colors.YELLOW}No configuration file found.{Colors.END}")
+        except OSError as e:
+            print(f"{Colors.RED}Error resetting configuration: {e}{Colors.END}")
+        return
+        
+    if args.save_config:
+        # Update config with current settings
+        config['model'] = args.model
+        config['temperature'] = args.temperature
+        config['auto_mode'] = args.auto
+        config['analyze_errors'] = args.analyze
+        if args.set_timeout:
+            config['timeout'] = args.set_timeout
+        
+        # Save the configuration
+        save_config(config)
+        print(f"{Colors.GREEN}Configuration saved to {CONFIG_FILE}{Colors.END}")
+        return
+        
+    if args.add_favorite_log:
+        if os.path.exists(args.add_favorite_log) and os.path.isfile(args.add_favorite_log):
+            if args.add_favorite_log not in config['favorite_logs']:
+                config['favorite_logs'].append(args.add_favorite_log)
+                save_config(config)
+                print(f"{Colors.GREEN}Added {args.add_favorite_log} to favorite logs.{Colors.END}")
+            else:
+                print(f"{Colors.YELLOW}This log is already in favorites.{Colors.END}")
+        else:
+            print(f"{Colors.RED}Error: File does not exist or is not accessible.{Colors.END}")
+        return
+        
+    if args.set_timeout:
+        config['timeout'] = args.set_timeout
+        REQUEST_TIMEOUT = args.set_timeout
+        save_config(config)
+        print(f"{Colors.GREEN}API request timeout set to {args.set_timeout} seconds.{Colors.END}")
+        
+    # Auto mode: generate, execute, and fix automatically
+    if args.auto:
+        auto_mode(args.prompt, args.model, args.max_attempts, args.temperature)
+        return
+    
+    # Generate the command
+    print(f"{Colors.GREEN}Generating command for: {Colors.BOLD}{args.prompt}{Colors.END}")
+    command = generate_command(args.prompt, args.model, args.temperature)
+    
+    # Display the generated command
+    print(f"\n{Colors.CYAN}Generated Command: {Colors.BOLD}{command}{Colors.END}")
+    
+    # Handle execution based on flags
+    if args.dry_run:
+        # Just show the command without executing
+        print(f"\n{Colors.YELLOW}Dry run - command not executed{Colors.END}")
+    elif args.yes:
+        # Quick confirmation before execution
+        print(f"\n{Colors.GREEN}About to execute: {Colors.BOLD}{command}{Colors.END}")
+        response = input(f"{Colors.GREEN}Press Enter to continue or Ctrl+C to cancel...{Colors.END}")
+        returncode, output = execute_command(command, args.analyze, args.model)
+        
+        # Save output if requested
+        if args.save_output and output:
+            try:
+                with open(args.save_output, 'w') as f:
+                    f.write(output)
+                print(f"\n{Colors.GREEN}Output saved to: {Colors.BOLD}{args.save_output}{Colors.END}")
+            except Exception as e:
+                print(f"\n{Colors.RED}Failed to save output: {e}{Colors.END}")
+                
+        # Analyze errors if requested and command failed
+        if args.analyze and returncode != 0:
+            print(f"\n{Colors.BLUE}Analyzing error...{Colors.END}")
+            analysis = analyze_error(output, command, args.model)
+            
+            print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Error Analysis:{Colors.END}")
+            print(f"{Colors.CYAN}{analysis}{Colors.END}")
+            
+            print(f"\n{Colors.GREEN}Would you like to fix this error and try again? (y/n): {Colors.END}", end="")
+            if input().lower() in ["y", "yes"]:
+                fixed_command = fix_command(command, output, args.model)
+                print(f"\n{Colors.CYAN}Fixed Command: {Colors.BOLD}{fixed_command}{Colors.END}")
+                
+                print(f"\n{Colors.GREEN}Execute this fixed command? (y/n): {Colors.END}", end="")
+                if input().lower() in ["y", "yes"]:
+                    execute_command(fixed_command, False, args.model)
+    elif args.execute:
+        # Execute with confirmation
+        response = input(f"\n{Colors.GREEN}Do you want to execute this command? (y/n): {Colors.END}").lower()
+        if response in ["y", "yes"]:
+            returncode, output = execute_command(command, args.analyze, args.model)
+            
+            # Save output if requested
+            if args.save_output and output:
+                try:
+                    with open(args.save_output, 'w') as f:
+                        f.write(output)
+                    print(f"\n{Colors.GREEN}Output saved to: {Colors.BOLD}{args.save_output}{Colors.END}")
+                except Exception as e:
+                    print(f"\n{Colors.RED}Failed to save output: {e}{Colors.END}")
+                    
+            # Analyze errors if requested and command failed
+            if args.analyze and returncode != 0:
+                print(f"\n{Colors.BLUE}Analyzing error...{Colors.END}")
+                analysis = analyze_error(output, command, args.model)
+                
+                print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Error Analysis:{Colors.END}")
+                print(f"{Colors.CYAN}{analysis}{Colors.END}")
+                
+                print(f"\n{Colors.GREEN}Would you like to fix this error and try again? (y/n): {Colors.END}", end="")
+                if input().lower() in ["y", "yes"]:
+                    fixed_command = fix_command(command, output, args.model)
+                    print(f"\n{Colors.CYAN}Fixed Command: {Colors.BOLD}{fixed_command}{Colors.END}")
+                    
+                    print(f"\n{Colors.GREEN}Execute this fixed command? (y/n): {Colors.END}", end="")
+                    if input().lower() in ["y", "yes"]:
+                        execute_command(fixed_command, False, args.model)
+        else:
+            print(f"{Colors.YELLOW}Command execution cancelled.{Colors.END}")
+    else:
+        # Just ask if user wants to execute
+        response = input(f"\n{Colors.GREEN}Do you want to execute this command? (y/n): {Colors.END}").lower()
+        if response in ["y", "yes"]:
+            returncode, output = execute_command(command, args.analyze, args.model)
+            
+            # Save output if requested
+            if args.save_output and output:
+                try:
+                    with open(args.save_output, 'w') as f:
+                        f.write(output)
+                    print(f"\n{Colors.GREEN}Output saved to: {Colors.BOLD}{args.save_output}{Colors.END}")
+                except Exception as e:
+                    print(f"\n{Colors.RED}Failed to save output: {e}{Colors.END}")
+                    
+            # Analyze errors if requested and command failed
+            if args.analyze and returncode != 0:
+                print(f"\n{Colors.BLUE}Analyzing error...{Colors.END}")
+                analysis = analyze_error(output, command, args.model)
+                
+                print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Error Analysis:{Colors.END}")
+                print(f"{Colors.CYAN}{analysis}{Colors.END}")
+                
+                print(f"\n{Colors.GREEN}Would you like to fix this error and try again? (y/n): {Colors.END}", end="")
+                if input().lower() in ["y", "yes"]:
+                    fixed_command = fix_command(command, output, args.model)
+                    print(f"\n{Colors.CYAN}Fixed Command: {Colors.BOLD}{fixed_command}{Colors.END}")
+                    
+                    print(f"\n{Colors.GREEN}Execute this fixed command? (y/n): {Colors.END}", end="")
+                    if input().lower() in ["y", "yes"]:
+                        execute_command(fixed_command, False, args.model)
+        else:
+            print(f"{Colors.YELLOW}Command execution cancelled.{Colors.END}")
+
+def disable_colors():
+    """
+    Disable all color output.
+    """
+    for attr in dir(Colors):
+        if not attr.startswith('__'):
+            setattr(Colors, attr, '')
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print(f"\n{Colors.YELLOW}Operation cancelled by user.{Colors.END}")
+        sys.exit(0) 
