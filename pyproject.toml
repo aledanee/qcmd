@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# This uses the PyPI-optimized README for better display on PyPI
+name = "ibrahimiq-qcmd"
+version = "1.0.1"
+authors = [
+  {name = "Ibrahim", email = "ibrahimihssan1@gmail.com"},
+]
+description = "AI-powered Command Generator using Local LLMs"
+readme = "PYPI-README.md"
+license = "MIT"
+requires-python = ">=3.6"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Topic :: Utilities",
+    "Environment :: Console",
+]
+dependencies = [
+    "requests>=2.25.0",
+    "configparser>=5.0.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/aledanee/qcmd"
+"Bug Tracker" = "https://github.com/aledanee/qcmd/issues"
+"Documentation" = "https://github.com/aledanee/qcmd/blob/main/qcmd-docs.html"
+
+[tool.setuptools]
+packages = ["qcmd_cli"]
+py-modules = []
+
+[tool.setuptools.package-data]
+qcmd_cli = ["*.bash"]
+
+[project.scripts]
+qcmd = "qcmd_cli.qcmd:main" 

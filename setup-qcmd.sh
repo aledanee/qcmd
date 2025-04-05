@@ -30,9 +30,19 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Make qcmd executable
-echo -e "${GREEN}Making qcmd executable...${NC}"
-chmod +x qcmd
+# Install the package
+echo -e "${GREEN}Installing qcmd package...${NC}"
+python3 -m pip install -e .
+
+# Create wrapper script
+echo -e "${GREEN}Creating wrapper script...${NC}"
+cat > qcmd-wrapper << 'EOF'
+#!/usr/bin/env python3
+from qcmd_cli.qcmd import main
+if __name__ == "__main__":
+    main()
+EOF
+chmod +x qcmd-wrapper
 
 # Check if we have sudo access (only needed for system-wide installation)
 HAS_SUDO=0
@@ -61,9 +71,9 @@ if [ "$INSTALL_TYPE" = "1" ]; then
     # Create bin directory if it doesn't exist
     mkdir -p "$HOME/.local/bin"
     
-    # Copy qcmd to bin directory
-    echo -e "${GREEN}Copying qcmd to ~/.local/bin...${NC}"
-    cp qcmd "$HOME/.local/bin/"
+    # Copy wrapper to bin directory
+    echo -e "${GREEN}Copying qcmd wrapper to ~/.local/bin...${NC}"
+    cp qcmd-wrapper "$HOME/.local/bin/qcmd"
     
     # Add to PATH if not already there
     if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
@@ -103,9 +113,9 @@ if [ "$INSTALL_TYPE" = "1" ]; then
 else
     echo -e "${GREEN}Performing system-wide installation...${NC}"
     
-    # Copy qcmd to /usr/local/bin
-    echo -e "${GREEN}Copying qcmd to /usr/local/bin...${NC}"
-    sudo cp qcmd /usr/local/bin/
+    # Copy wrapper to /usr/local/bin
+    echo -e "${GREEN}Copying qcmd wrapper to /usr/local/bin...${NC}"
+    sudo cp qcmd-wrapper /usr/local/bin/qcmd
     sudo chmod +x /usr/local/bin/qcmd
     
     # Set up bash completion
@@ -121,5 +131,6 @@ echo -e "${BLUE}To get started, try:${NC}"
 echo -e "  ${BOLD}qcmd \"list files in current directory\"${NC}"
 echo -e "  ${BOLD}qcmd -A \"find large files\"${NC}"
 echo -e "  ${BOLD}qcmd -s${NC} (for interactive shell)"
+echo -e "  ${BOLD}qcmd --check-updates${NC} (to check for updates)"
 echo
 echo -e "${YELLOW}NOTE: For tab completion to work, you may need to restart your terminal.${NC}" 
