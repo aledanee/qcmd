@@ -2,7 +2,7 @@
 
 A simple command-line tool that generates shell commands using local AI models via Ollama.
 
-**Version 1.0.6**
+**Version 1.0.7**
 
 ## Overview
 
@@ -52,6 +52,14 @@ qcmd -A "find Python files modified today"
 # Interactive shell
 qcmd -s
 ```
+
+## What's New in 1.0.7
+
+- Added `--watch` option to monitor log files without AI analysis
+- Added `/watch` command to interactive shell
+- Improved log monitoring functionality with separate watching and analysis modes
+- Enhanced user experience with more file monitoring options
+- Added ability to view log updates in real-time (like `tail -f`)
 
 ## What's New in 1.0.6
 

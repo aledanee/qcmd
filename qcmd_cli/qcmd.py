@@ -568,11 +568,13 @@ def print_examples():
     print(f"    {Colors.BOLD}qcmd --logs{Colors.END} (find and analyze system logs)")
     print(f"    {Colors.BOLD}qcmd --all-logs{Colors.END} (view all log files in one list)")
     print(f"    {Colors.BOLD}qcmd --analyze-file /var/log/syslog{Colors.END} (analyze specific file)")
-    print(f"    {Colors.BOLD}qcmd --monitor /var/log/auth.log{Colors.END} (monitor file in real-time)")
+    print(f"    {Colors.BOLD}qcmd --monitor /var/log/auth.log{Colors.END} (monitor file with AI analysis)")
+    print(f"    {Colors.BOLD}qcmd --watch /var/log/auth.log{Colors.END} (watch file without AI analysis)")
     print(f"    Inside shell: {Colors.BOLD}/logs{Colors.END} (access log analysis tools)")
     print(f"    Inside shell: {Colors.BOLD}/all-logs{Colors.END} (view all available log files)")
     print(f"    Inside shell: {Colors.BOLD}/analyze-file /path/to/file.log{Colors.END} (analyze file)")
-    print(f"    Inside shell: {Colors.BOLD}/monitor /path/to/file.log{Colors.END} (monitor file)")
+    print(f"    Inside shell: {Colors.BOLD}/monitor /path/to/file.log{Colors.END} (monitor with AI analysis)")
+    print(f"    Inside shell: {Colors.BOLD}/watch /path/to/file.log{Colors.END} (watch without AI analysis)")
     
     print(f"\n  {Colors.CYAN}Interactive shell:{Colors.END}")
     print(f"    {Colors.BOLD}qcmd --shell{Colors.END} or {Colors.BOLD}qcmd -s{Colors.END}")
@@ -665,7 +667,8 @@ def start_interactive_shell(auto_mode_enabled: bool = False, current_model: str 
                     print(f"  {Colors.BOLD}/logs{Colors.END}           Find and analyze log files")
                     print(f"  {Colors.BOLD}/all-logs{Colors.END}       Show all available log files")
                     print(f"  {Colors.BOLD}/analyze-file <path>{Colors.END}  Analyze a specific file")
-                    print(f"  {Colors.BOLD}/monitor <path>{Colors.END}       Monitor a file continuously")
+                    print(f"  {Colors.BOLD}/monitor <path>{Colors.END}       Monitor a file continuously with AI analysis")
+                    print(f"  {Colors.BOLD}/watch <path>{Colors.END}         Watch a file continuously without AI analysis")
                     
                     print(f"\n{Colors.YELLOW}Current settings:{Colors.END}")
                     print(f"  Model: {Colors.BOLD}{current_model}{Colors.END}")
@@ -765,11 +768,21 @@ def start_interactive_shell(auto_mode_enabled: bool = False, current_model: str 
                     if len(parts) > 1:
                         file_path = parts[1]
                         if os.path.exists(file_path) and os.path.isfile(file_path):
-                            analyze_log_file(file_path, current_model, True)
+                            analyze_log_file(file_path, current_model, True, True)
                         else:
                             print(f"{Colors.RED}Error: File {file_path} does not exist or is not accessible.{Colors.END}")
                     else:
                         print(f"{Colors.YELLOW}Usage: /monitor <file_path>{Colors.END}")
+                
+                elif cmd == "/watch":
+                    if len(parts) > 1:
+                        file_path = parts[1]
+                        if os.path.exists(file_path) and os.path.isfile(file_path):
+                            analyze_log_file(file_path, current_model, True, False)
+                        else:
+                            print(f"{Colors.RED}Error: File {file_path} does not exist or is not accessible.{Colors.END}")
+                    else:
+                        print(f"{Colors.YELLOW}Usage: /watch <file_path>{Colors.END}")
                         
                 else:
                     print(f"{Colors.YELLOW}Unknown command: {cmd}{Colors.END}")
@@ -979,7 +992,7 @@ def auto_mode(prompt: str, model: str = DEFAULT_MODEL, max_attempts: int = 3, te
         
         print(f"\n{Colors.YELLOW}Command failed. Automatically trying to fix it...{Colors.END}")
 
-def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool = False) -> None:
+def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool = False, analyze: bool = True) -> None:
     """
     Analyze a log file continuously or once.
     
@@ -987,12 +1000,13 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
         log_file: Path to the log file to analyze
         model: The model to use for analysis
         background: Whether to run in background continuously
+        analyze: Whether to perform AI analysis on the log content
     """
     if not os.path.exists(log_file):
         print(f"{Colors.RED}Error: Log file {log_file} does not exist.{Colors.END}")
         return
         
-    print(f"{Colors.GREEN}Analyzing log file: {Colors.BOLD}{log_file}{Colors.END}")
+    print(f"{Colors.GREEN}{'Analyzing' if analyze else 'Watching'} log file: {Colors.BOLD}{log_file}{Colors.END}")
     
     # Get file size for pagination
     file_size = os.path.getsize(log_file)
@@ -1061,8 +1075,8 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
     # Function to run in a separate thread
     def monitor_log():
         nonlocal last_position
-        print(f"{Colors.GREEN}Starting continuous log monitoring for {Colors.BOLD}{log_file}{Colors.END}")
-        print(f"{Colors.YELLOW}Press Ctrl+C to stop monitoring.{Colors.END}")
+        print(f"{Colors.GREEN}Starting continuous log {'monitoring with analysis' if analyze else 'watching'} for {Colors.BOLD}{log_file}{Colors.END}")
+        print(f"{Colors.YELLOW}Press Ctrl+C to stop {'monitoring' if analyze else 'watching'}.{Colors.END}")
         
         try:
             while True:
@@ -1082,8 +1096,9 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
                             print(new_content)
                             print(f"{Colors.YELLOW}" + "-" * 40 + f"{Colors.END}")
                             
-                            # Analyze the new content
-                            analyze_log_content(new_content, log_file, model)
+                            # Analyze the new content only if analyze flag is True
+                            if analyze:
+                                analyze_log_content(new_content, log_file, model)
                         
                         # Update position
                         last_position = current_size
@@ -1103,9 +1118,9 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
                 time.sleep(1)
                 
         except KeyboardInterrupt:
-            print(f"\n{Colors.YELLOW}Stopped monitoring log file.{Colors.END}")
+            print(f"\n{Colors.YELLOW}Stopped {'monitoring' if analyze else 'watching'}.{Colors.END}")
         except Exception as e:
-            print(f"\n{Colors.RED}Error monitoring log file: {e}{Colors.END}")
+            print(f"\n{Colors.RED}Error {'monitoring' if analyze else 'watching'}: {e}{Colors.END}")
     
     # Start monitoring in a separate thread
     monitor_thread = threading.Thread(target=monitor_log)
@@ -1117,7 +1132,7 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
         while monitor_thread.is_alive():
             monitor_thread.join(1)
     except KeyboardInterrupt:
-        print(f"\n{Colors.YELLOW}Stopped log analysis.{Colors.END}")
+        print(f"\n{Colors.YELLOW}Stopped {'monitoring' if analyze else 'watching'}.{Colors.END}")
 
 def analyze_log_content(log_content: str, log_file: str, model: str = DEFAULT_MODEL) -> None:
     """
@@ -1675,9 +1690,12 @@ def handle_log_selection(selected_log: str, model: str) -> None:
     if not selected_log:
         return
         
-    # Ask if user wants to analyze or monitor the selected log
-    action = input(f"{Colors.GREEN}Do you want to (a)nalyze or (m)onitor this log? (a/m): {Colors.END}").lower()
+    # Ask if user wants to analyze, monitor with analysis, or just watch the selected log
+    action = input(f"{Colors.GREEN}Do you want to (a)nalyze once, (m)onitor with analysis, or just (w)atch without analysis? (a/m/w): {Colors.END}").lower()
     is_monitor = action.startswith('m')
+    is_watch = action.startswith('w')
+    analyze = not is_watch  # True for analyze and monitor, False for watch
+    background = is_monitor or is_watch  # True for both monitoring options
     
     # Special handling for journalctl entries
     if selected_log.startswith("journalctl:"):
@@ -1715,10 +1733,10 @@ def handle_log_selection(selected_log: str, model: str) -> None:
                     return
             
             # Analyze the log file
-            analyze_log_file(temp_file_path, model, is_monitor)
+            analyze_log_file(temp_file_path, model, background, analyze)
             
             # Clean up temp file if not in continuous mode
-            if not is_monitor:
+            if not background:
                 try:
                     os.unlink(temp_file_path)
                 except:
@@ -1731,7 +1749,7 @@ def handle_log_selection(selected_log: str, model: str) -> None:
     else:
         # Regular file
         if os.path.exists(selected_log) and os.path.isfile(selected_log):
-            analyze_log_file(selected_log, model, is_monitor)
+            analyze_log_file(selected_log, model, background, analyze)
         else:
             print(f"{Colors.RED}Error: File {selected_log} does not exist or is not accessible.{Colors.END}")
 
@@ -1929,6 +1947,37 @@ def parse_args():
         help="Check for available updates"
     )
     
+    # Add argument parser options
+    parser.add_argument(
+        "--logs", "-L",
+        action="store_true",
+        help="Find and analyze system log files"
+    )
+    
+    parser.add_argument(
+        "--all-logs",
+        action="store_true",
+        help="Show all available log files"
+    )
+    
+    parser.add_argument(
+        "--analyze-file",
+        metavar="FILE",
+        help="Analyze a specific log or text file"
+    )
+    
+    parser.add_argument(
+        "--monitor",
+        metavar="FILE",
+        help="Monitor a log file with AI analysis in real-time"
+    )
+    
+    parser.add_argument(
+        "--watch",
+        metavar="FILE",
+        help="Watch a log file in real-time without AI analysis (similar to 'tail -f')"
+    )
+    
     # Parse the arguments
     args = parser.parse_args()
     
@@ -1992,6 +2041,43 @@ def parse_args():
             execute_command(command, args.analyze, args.model)
         else:
             print("Command execution cancelled.")
+    
+    # Handle log analysis
+    if args.logs:
+        handle_log_analysis(args.model)
+        return
+        
+    if args.all_logs:
+        log_files = find_log_files()
+        if log_files:
+            print(f"{Colors.GREEN}Found {len(log_files)} log files:{Colors.END}")
+            selected_log = display_log_selection(log_files)
+            if selected_log:
+                handle_log_selection(selected_log, args.model)
+        else:
+            print(f"{Colors.YELLOW}No accessible log files found on the system.{Colors.END}")
+        return
+        
+    if args.analyze_file:
+        if os.path.exists(args.analyze_file) and os.path.isfile(args.analyze_file):
+            analyze_log_file(args.analyze_file, args.model, False, True)
+        else:
+            print(f"{Colors.RED}Error: File {args.analyze_file} does not exist or is not accessible.{Colors.END}")
+        return
+        
+    if args.monitor:
+        if os.path.exists(args.monitor) and os.path.isfile(args.monitor):
+            analyze_log_file(args.monitor, args.model, True, True)
+        else:
+            print(f"{Colors.RED}Error: File {args.monitor} does not exist or is not accessible.{Colors.END}")
+        return
+        
+    if args.watch:
+        if os.path.exists(args.watch) and os.path.isfile(args.watch):
+            analyze_log_file(args.watch, args.model, True, False)
+        else:
+            print(f"{Colors.RED}Error: File {args.watch} does not exist or is not accessible.{Colors.END}")
+        return
 
 def is_dangerous_command(command: str) -> bool:
     """
