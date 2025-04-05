@@ -2536,17 +2536,14 @@ def is_dangerous_command(command: str) -> bool:
             return True
     return False
 
-def get_system_status() -> Dict[str, Any]:
+def get_system_status():
     """
-    Get information about system status and qcmd active processes.
+    Get system status information, suitable for JSON output
     
     Returns:
-        Dict with status information
+        Dictionary with system status information
     """
-    status = {}
-    
-    # Get system info
-    status["system"] = {
+    status = {
         "os": os.name,
         "python_version": sys.version.split()[0],
         "qcmd_version": __version__,
@@ -2601,6 +2598,36 @@ def get_system_status() -> Dict[str, Any]:
             pass
     
     return status
+
+def check_ollama_status():
+    """
+    Check if Ollama service is running and get available models.
+    
+    Returns:
+        Tuple of (status_string, api_url, model_list)
+    """
+    status = "Not running"
+    api_url = OLLAMA_API
+    models = []
+    
+    try:
+        # Try to connect to Ollama API with a short timeout
+        response = requests.get(f"{OLLAMA_API}/tags", timeout=2)
+        
+        if response.status_code == 200:
+            status = "Running"
+            # Get available models if successful
+            try:
+                models_data = response.json().get("models", [])
+                models = [model["name"] for model in models_data]
+            except (KeyError, json.JSONDecodeError):
+                # If we can't parse the models, just leave the list empty
+                pass
+    except requests.exceptions.RequestException:
+        # Any request exception means Ollama is not running or not accessible
+        pass
+        
+    return status, api_url, models
 
 def display_system_status():
     """
