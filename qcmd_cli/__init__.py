@@ -1,5 +1,5 @@
 """
-QCMD - AI Shell Command Generator
+QCMD - Iraqi-powered Command Generation Tool.
 """
 
-__version__ = '1.0.10' 
+__version__ = "1.0.12" 
