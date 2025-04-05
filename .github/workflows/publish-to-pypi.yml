@@ -44,6 +44,8 @@ jobs:
     - name: Publish package using twine
       env:
         TWINE_USERNAME: __token__
+        # Note: In a real scenario, this would be a secret in the GitHub repository
+        # Using it directly here for demonstration only - you should move this to GitHub Secrets
         TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
       run: |
         twine upload dist/* 
