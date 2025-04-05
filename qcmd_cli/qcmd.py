@@ -23,6 +23,7 @@ import configparser
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple, List
 import shutil
+import shlex
 
 try:
     # For Python 3.8+
@@ -47,13 +48,13 @@ DEFAULT_MODEL = "qwen2.5-coder:0.5b"
 
 # Global variables
 CONFIG_DIR = os.path.expanduser("~/.qcmd")
-CONFIG_FILE = os.path.join(CONFIG_DIR, "config.ini")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 HISTORY_FILE = os.path.join(CONFIG_DIR, "history.txt")
 MAX_HISTORY = 1000  # Maximum number of history entries to keep
 REQUEST_TIMEOUT = 30  # Timeout for API requests in seconds
 LOG_CACHE_FILE = os.path.join(CONFIG_DIR, "log_cache.json")
 LOG_CACHE_EXPIRY = 3600  # Cache expires after 1 hour (in seconds)
-MONITORS_FILE = os.path.join(CONFIG_DIR, "monitors.json")
+MONITORS_FILE = os.path.join(CONFIG_DIR, "active_monitors.json")
 SESSIONS_FILE = os.path.join(CONFIG_DIR, "sessions.json")
 
 # Additional dangerous patterns for improved detection
@@ -1651,7 +1652,7 @@ def read_large_file(file_path: str, chunk_size: int = 1024 * 1024) -> str:
         print(f"{Colors.YELLOW}Operation cancelled.{Colors.END}")
         return ""
 
-def find_log_files() -> List[str]:
+def find_log_files(include_system: bool = False) -> List[str]:
     """
     Find log files in common locations in the system.
     
@@ -1997,121 +1998,86 @@ def handle_log_selection(selected_log: str, model: str) -> None:
 
 def load_config() -> Dict:
     """
-    Load configuration from config file.
+    Load configuration from file
     
     Returns:
-        Dictionary with configuration options
+        Dictionary containing configuration values
     """
     config = {
         'model': DEFAULT_MODEL,
-        'temperature': 0.2,
-        'auto_mode': False,
-        'analyze_errors': False,
-        'timeout': REQUEST_TIMEOUT,
-        'favorite_logs': [],
-        'colors': {},
+        'temperature': 0.7,
+        'max_attempts': 3,
+        'check_updates': True,
         'ui': {
             'show_iraq_banner': True,
-            'show_logo': True,
+            'show_progress_bar': True,
             'compact_mode': False,
-            'verbose_logging': True,
-        }
+            'banner_font': 'slant',  # New option for pyfiglet font
+            'progress_delay': 0.05   # Control speed of progress animation
+        },
+        'colors': Colors.get_all_colors()
     }
     
+    # Create config directory if it doesn't exist
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    
+    # If config file exists, load it and update defaults
     if os.path.exists(CONFIG_FILE):
         try:
-            parser = configparser.ConfigParser()
-            parser.read(CONFIG_FILE)
-            
-            if 'general' in parser:
-                if 'model' in parser['general']:
-                    config['model'] = parser['general']['model']
-                if 'temperature' in parser['general']:
-                    config['temperature'] = float(parser['general']['temperature'])
-                if 'auto_mode' in parser['general']:
-                    config['auto_mode'] = parser['general'].getboolean('auto_mode')
-                if 'analyze_errors' in parser['general']:
-                    config['analyze_errors'] = parser['general'].getboolean('analyze_errors')
-                if 'timeout' in parser['general']:
-                    config['timeout'] = int(parser['general']['timeout'])
-            
-            if 'logs' in parser and 'favorites' in parser['logs']:
-                config['favorite_logs'] = parser['logs']['favorites'].split(',')
-            
-            # Load color customizations
-            if 'colors' in parser:
-                for key in parser['colors']:
-                    config['colors'][key.upper()] = parser['colors'][key]
-            
-            # Load UI customizations
-            if 'ui' in parser:
-                for key in ['show_iraq_banner', 'show_logo', 'compact_mode', 'verbose_logging']:
-                    if key in parser['ui']:
-                        config['ui'][key] = parser['ui'].getboolean(key)
+            with open(CONFIG_FILE, 'r') as f:
+                user_config = json.load(f)
                 
-        except (configparser.Error, ValueError) as e:
-            print(f"{Colors.YELLOW}Warning: Could not parse config file: {e}{Colors.END}")
-    
-    # Apply color configuration
-    Colors.load_from_config(config)
+            # Update top-level keys
+            for key, value in user_config.items():
+                if key in config and isinstance(config[key], dict) and isinstance(value, dict):
+                    # For nested dictionaries, update each sub-key
+                    config[key].update(value)
+                else:
+                    # For top-level keys, replace the value
+                    config[key] = value
+                    
+            # Apply colors from config
+            Colors.load_from_config(config)
+        
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"{Colors.YELLOW}Error loading config: {e}{Colors.END}")
+            print(f"{Colors.YELLOW}Using default configuration.{Colors.END}")
     
     return config
 
 def save_config(config: Dict) -> None:
     """
-    Save configuration to config file.
+    Save configuration to file
     
     Args:
-        config: Dictionary with configuration options
+        config: Dictionary containing configuration values
     """
     try:
-        parser = configparser.ConfigParser()
-        
-        parser['general'] = {
-            'model': config['model'],
-            'temperature': str(config['temperature']),
-            'auto_mode': str(config['auto_mode']),
-            'analyze_errors': str(config['analyze_errors']),
-            'timeout': str(config['timeout']),
-        }
-        
-        parser['logs'] = {
-            'favorites': ','.join(config['favorite_logs'])
-        }
-        
-        # Save color customizations
-        if 'colors' in config and config['colors']:
-            parser['colors'] = {}
-            for key, value in config['colors'].items():
-                parser['colors'][key.lower()] = value
-        
-        # Save UI customizations
-        if 'ui' in config:
-            parser['ui'] = {}
-            for key, value in config['ui'].items():
-                parser['ui'][key] = str(value)
-        
+        # Create config directory if it doesn't exist
         os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+        
+        # Save as JSON
         with open(CONFIG_FILE, 'w') as f:
-            parser.write(f)
-            
-    except (IOError, OSError) as e:
-        print(f"{Colors.YELLOW}Warning: Could not save config file: {e}{Colors.END}")
+            json.dump(config, f, indent=4)
+    except Exception as e:
+        print(f"{Colors.YELLOW}Error saving configuration: {e}{Colors.END}", file=sys.stderr)
 
 def print_iraq_banner():
     """
     Print a stylized IRAQ banner with colors using pyfiglet.
     """
-    if load_config().get('ui', {}).get('show_iraq_banner', True):
+    config = load_config()
+    if config.get('ui', {}).get('show_iraq_banner', True):
         # Don't waste space in compact mode
-        if load_config().get('ui', {}).get('compact_mode', False):
+        if config.get('ui', {}).get('compact_mode', False):
             print(f"{Colors.GREEN}Welcome to QCMD - Iraqi-powered command generation tool!{Colors.END}")
             return
             
         try:
-            # Use pyfiglet for stylized text
+            # Use pyfiglet for stylized text with font from config
             from pyfiglet import Figlet
-            figlet = Figlet(font='slant')
+            font = config.get('ui', {}).get('banner_font', 'slant')
+            figlet = Figlet(font=font)
             iraq_text = figlet.renderText('IRAQ')
             
             # Print the text with green color
@@ -2135,162 +2101,144 @@ def print_iraq_banner():
         print(f"{Colors.YELLOW}Command Generation Tool - Version: {__version__}{Colors.END}")
         print()
 
-def show_download_progress(total=20, delay=0.05, message="Loading Iraqi magic"):
+def show_download_progress(total=20, message="Initializing QCMD with Iraqi excellence"):
     """
-    Display a cool download/loading animation with Iraqi colors.
+    Display a loading animation with Iraqi colors
     
     Args:
         total: Total number of steps in the progress bar
-        delay: Delay between steps in seconds
-        message: Message to display during loading
+        message: Message to display above the progress bar
     """
-    import time
-    import sys
+    config = load_config()
     
-    # Don't show if in compact mode
-    if load_config().get('ui', {}).get('compact_mode', False):
+    # Skip if progress bar is disabled in config
+    if not config.get('ui', {}).get('show_progress_bar', True):
         return
-        
-    colors = [Colors.RED, Colors.WHITE, Colors.GREEN]
-    color_index = 0
+    
+    # Use delay from config
+    delay = config.get('ui', {}).get('progress_delay', 0.05)
     
     print(f"\n{message}:")
     
-    # Progress bar
+    # Determine terminal width
+    term_width = shutil.get_terminal_size().columns
+    bar_width = min(term_width - 2, 40)  # Ensure it fits in terminal
+    
     for i in range(total + 1):
         # Calculate percentage
-        percent = i * 100 // total
+        percent = i / total
+        filled_length = int(bar_width * percent)
+        empty_length = bar_width - filled_length
         
-        # Create the progress bar with Iraqi flag colors
-        bar = ""
-        for j in range(total):
-            if j < i:
-                bar += f"{colors[j % 3]}█{Colors.END}"
-            else:
-                bar += "░"
-                
-        # Print the bar and percentage
-        sys.stdout.write(f"\r[{bar}] {percent}%")
+        # Use Iraq flag colors for the progress bar
+        if filled_length > 0:
+            # Divide the filled part into three sections for the three colors
+            section_length = max(1, filled_length // 3)
+            
+            red_length = min(section_length, filled_length)
+            filled_length -= red_length
+            
+            white_length = min(section_length, filled_length)
+            filled_length -= white_length
+            
+            green_length = filled_length  # Remainder goes to green
+            
+            # Create the colored progress bar
+            bar = f"{Colors.RED}{'█' * red_length}{Colors.WHITE}{'█' * white_length}{Colors.GREEN}{'█' * green_length}{Colors.END}{' ' * empty_length}"
+        else:
+            bar = ' ' * bar_width
+        
+        # Print progress bar with percentage
+        sys.stdout.write(f"\r[{bar}] {int(percent * 100)}%")
         sys.stdout.flush()
         
-        # Add a small delay for animation effect
         time.sleep(delay)
     
-    # Add a newline after the progress bar completes
     print("\n")
 
 def handle_config_command(args):
-    """
-    Handle the /config command in the interactive shell
-    """
-    if not args:
-        # Show current configuration
-        config = load_config()
-        
-        print(f"\n{Colors.CYAN}{Colors.BOLD}Current Configuration:{Colors.END}")
-        print(f"{Colors.CYAN}{'='*50}{Colors.END}")
-        
-        print(f"{Colors.BOLD}General Settings:{Colors.END}")
-        print(f"  Model: {config['model']}")
-        print(f"  Temperature: {config['temperature']}")
-        print(f"  Auto Mode: {config['auto_mode']}")
-        print(f"  Analyze Errors: {config['analyze_errors']}")
-        print(f"  Timeout: {config['timeout']}")
+    """Handle configuration subcommands"""
+    config = load_config()
+    
+    # Split the command into parts, handling quoted values correctly
+    parts = shlex.split(args) if args else []
+    
+    if not parts:
+        # Display current configuration
+        print(f"\n{Colors.BOLD}Current Configuration:{Colors.END}")
+        print(f"  {Colors.CYAN}model: {Colors.END}{config.get('model', DEFAULT_MODEL)}")
+        print(f"  {Colors.CYAN}temperature: {Colors.END}{config.get('temperature', 0.7)}")
+        print(f"  {Colors.CYAN}max_attempts: {Colors.END}{config.get('max_attempts', 3)}")
+        print(f"  {Colors.CYAN}check_updates: {Colors.END}{config.get('check_updates', True)}")
         
         print(f"\n{Colors.BOLD}UI Settings:{Colors.END}")
-        for key, value in config.get('ui', {}).items():
-            print(f"  {key}: {value}")
+        ui_config = config.get('ui', {})
+        print(f"  {Colors.CYAN}show_iraq_banner: {Colors.END}{ui_config.get('show_iraq_banner', True)}")
+        print(f"  {Colors.CYAN}show_progress_bar: {Colors.END}{ui_config.get('show_progress_bar', True)}")
+        print(f"  {Colors.CYAN}compact_mode: {Colors.END}{ui_config.get('compact_mode', False)}")
+        print(f"  {Colors.CYAN}banner_font: {Colors.END}{ui_config.get('banner_font', 'slant')}")
+        print(f"  {Colors.CYAN}progress_delay: {Colors.END}{ui_config.get('progress_delay', 0.05)}")
         
         print(f"\n{Colors.BOLD}Color Settings:{Colors.END}")
-        for key, value in Colors.get_all_colors().items():
-            print(f"  {key}: {value}")
-        
-        print(f"\n{Colors.YELLOW}Use /config set <key> <value> to change settings{Colors.END}")
-        print(f"{Colors.YELLOW}Example: /config set ui.show_iraq_banner false{Colors.END}")
-        print(f"{Colors.YELLOW}Example: /config set colors.GREEN \\033[92m{Colors.END}")
-        print(f"{Colors.YELLOW}Use /config reset to restore defaults{Colors.END}")
+        for color_name, color_value in config.get('colors', {}).items():
+            print(f"  {getattr(Colors, color_name, Colors.CYAN)}{color_name}: {color_value}{Colors.END}")
+            
         return
     
-    # Handle subcommands
-    cmd = args[0].lower()
-    
-    if cmd == 'reset':
-        # Reset all settings to defaults
-        config = {
-            'model': DEFAULT_MODEL,
-            'temperature': 0.2,
-            'auto_mode': False,
-            'analyze_errors': False,
-            'timeout': REQUEST_TIMEOUT,
-            'favorite_logs': [],
-            'colors': {},
-            'ui': {
-                'show_iraq_banner': True,
-                'show_logo': True,
-                'compact_mode': False,
-                'verbose_logging': True,
-            }
-        }
-        save_config(config)
+    if parts[0] == "reset":
+        # Reset to default configuration
+        os.remove(CONFIG_FILE) if os.path.exists(CONFIG_FILE) else None
         Colors.reset_to_defaults()
         print(f"{Colors.GREEN}Configuration reset to defaults.{Colors.END}")
-    
-    elif cmd == 'set' and len(args) >= 3:
-        # Set a configuration value
-        key = args[1]
-        value = ' '.join(args[2:])
+        return
         
-        config = load_config()
+    elif parts[0] == "set" and len(parts) >= 3:
+        key = parts[1]
+        value = parts[2]
         
-        # Handle nested keys (e.g., ui.show_iraq_banner)
-        if '.' in key:
-            section, subkey = key.split('.', 1)
+        # Handle nested keys (ui.property or colors.property)
+        if "." in key:
+            main_key, sub_key = key.split(".", 1)
             
-            if section.lower() == 'colors':
-                # Handle color settings
-                config['colors'][subkey.upper()] = value
-                Colors.load_from_config(config)
-                print(f"{Colors.GREEN}Color {subkey.upper()} set to {value}{Colors.END}")
-            
-            elif section.lower() == 'ui':
-                # Handle UI settings (convert to boolean)
-                if value.lower() in ('true', 'yes', '1', 'on'):
-                    config['ui'][subkey] = True
-                elif value.lower() in ('false', 'no', '0', 'off'):
-                    config['ui'][subkey] = False
-                else:
-                    config['ui'][subkey] = value
-                print(f"{Colors.GREEN}UI setting {subkey} set to {config['ui'][subkey]}{Colors.END}")
-            
+            # Make sure the main section exists
+            if main_key not in config:
+                config[main_key] = {}
+                
+            # Convert to appropriate type
+            if value.lower() in ('true', 'yes', 'y', 'on'):
+                config[main_key][sub_key] = True
+            elif value.lower() in ('false', 'no', 'n', 'off'):
+                config[main_key][sub_key] = False
+            elif value.isdigit():
+                config[main_key][sub_key] = int(value)
+            elif value.replace('.', '', 1).isdigit() and value.count('.') <= 1:
+                config[main_key][sub_key] = float(value)
             else:
-                print(f"{Colors.RED}Unknown configuration section: {section}{Colors.END}")
-                return
-        
+                config[main_key][sub_key] = value
+                
+            print(f"{Colors.GREEN}Setting {main_key}.{sub_key} set to {config[main_key][sub_key]}{Colors.END}")
+            
+            # Handle special case for colors
+            if main_key == 'colors' and hasattr(Colors, sub_key.upper()):
+                Colors.load_from_config(config)
+                print(f"{Colors.GREEN}Color applied!{Colors.END}")
+                
         else:
-            # Handle top-level keys
+            # Regular top-level key
             if key in config:
                 # Convert value to appropriate type
-                if isinstance(config[key], bool):
-                    if value.lower() in ('true', 'yes', '1', 'on'):
-                        config[key] = True
-                    elif value.lower() in ('false', 'no', '0', 'off'):
-                        config[key] = False
-                    else:
-                        print(f"{Colors.RED}Invalid boolean value: {value}{Colors.END}")
-                        return
-                
-                elif isinstance(config[key], float):
+                if value.lower() in ('true', 'yes', 'y', 'on'):
+                    config[key] = True
+                elif value.lower() in ('false', 'no', 'n', 'off'):
+                    config[key] = False
+                elif value.replace('.', '', 1).isdigit() and value.count('.') <= 1:
                     try:
-                        config[key] = float(value)
+                        if '.' in value:
+                            config[key] = float(value)
+                        else:
+                            config[key] = int(value)
                     except ValueError:
-                        print(f"{Colors.RED}Invalid float value: {value}{Colors.END}")
-                        return
-                
-                elif isinstance(config[key], int):
-                    try:
-                        config[key] = int(value)
-                    except ValueError:
-                        print(f"{Colors.RED}Invalid integer value: {value}{Colors.END}")
+                        print(f"{Colors.RED}Invalid number value: {value}{Colors.END}")
                         return
                 
                 else:
@@ -2307,6 +2255,9 @@ def handle_config_command(args):
     
     else:
         print(f"{Colors.YELLOW}Usage: /config [set <key> <value> | reset]{Colors.END}")
+        print(f"{Colors.YELLOW}For UI settings: /config set ui.show_iraq_banner true{Colors.END}")
+        print(f"{Colors.YELLOW}For colors: /config set colors.GREEN '\\033[92m'{Colors.END}")
+        print(f"{Colors.YELLOW}Available UI settings: show_iraq_banner, show_progress_bar, compact_mode, banner_font, progress_delay{Colors.END}")
 
 def check_for_updates(force_display: bool = False) -> None:
     """
@@ -2338,191 +2289,53 @@ def check_for_updates(force_display: bool = False) -> None:
 
 def main():
     """
-    Main entry point for the application when used as a package.
+    Main entry point for the command generator
     """
-    try:
-        # Show the Iraq banner
-        print_iraq_banner()
-        
-        # Show download progress
-        show_download_progress(message="Initializing QCMD with Iraqi excellence")
-        
-        # Check for updates before parsing args
-        check_for_updates()
-        
-        parse_args()
-    except KeyboardInterrupt:
-        print("\nOperation cancelled.")
-        sys.exit(1)
-
-def parse_args():
-    """
-    Parse command-line arguments and run the appropriate functions.
-    """
-    # Global variable declarations
-    global REQUEST_TIMEOUT
+    # Initialize config directory
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    
+    # Parse command-line arguments
+    args = parse_args()
     
     # Load configuration
     config = load_config()
     
-    # Set default values from config
-    REQUEST_TIMEOUT = config.get('timeout', REQUEST_TIMEOUT)
+    # Set default model from config if not specified
+    if args.model is None:
+        args.model = config.get('model', DEFAULT_MODEL)
     
-    # Create argument parser
-    parser = argparse.ArgumentParser(
-        description="Generate and execute shell commands using AI models via Ollama."
-    )
+    # Clean up stale monitor processes
+    cleanup_stale_monitors()
+    cleanup_stale_sessions()
     
-    # Main command arguments - make it optional with nargs="?"
-    parser.add_argument(
-        "prompt",
-        nargs="?",
-        help="Natural language description of the command you want"
-    )
+    # Display the banner
+    print_iraq_banner()
     
-    # Add model selection
-    parser.add_argument(
-        "--model", "-m",
-        default=config.get('model', DEFAULT_MODEL),
-        help=f"Model to use (default: {config.get('model', DEFAULT_MODEL)})"
-    )
+    # Show loading animation
+    show_download_progress()
     
-    parser.add_argument(
-        "--list-models", "-l",
-        action="store_true",
-        help="List available models and exit"
-    )
-    
-    # Add execution options
-    parser.add_argument(
-        "--execute", "-e",
-        action="store_true",
-        help="Execute the generated command after confirmation"
-    )
-    
-    parser.add_argument(
-        "--yes", "-y",
-        action="store_true",
-        help="Use simplified confirmation (just press Enter to execute)"
-    )
-    
-    parser.add_argument(
-        "--dry-run", "-d",
-        action="store_true",
-        help="Just show the command without executing"
-    )
-    
-    parser.add_argument(
-        "--analyze", "-a",
-        action="store_true",
-        help="Analyze errors if command execution fails"
-    )
-    
-    parser.add_argument(
-        "--auto", "-A",
-        action="store_true",
-        help="Auto mode: automatically generate, execute, and fix errors"
-    )
-    
-    # Add shell options
-    parser.add_argument(
-        "--shell", "-s",
-        action="store_true",
-        help="Start an interactive shell"
-    )
-    
-    # Add configuration options
-    parser.add_argument(
-        "--check-updates",
-        action="store_true",
-        help="Check for available updates"
-    )
-    
-    parser.add_argument(
-        "--config",
-        metavar="KEY=VALUE",
-        help="Set a configuration option (e.g. --config ui.show_iraq_banner=false)"
-    )
-    
-    # Add argument parser options
-    parser.add_argument(
-        "--logs", "-L",
-        action="store_true",
-        help="Find and analyze system log files"
-    )
-    
-    parser.add_argument(
-        "--all-logs",
-        action="store_true",
-        help="Show all available log files"
-    )
-    
-    parser.add_argument(
-        "--analyze-file",
-        metavar="FILE",
-        help="Analyze a specific log or text file"
-    )
-    
-    parser.add_argument(
-        "--monitor",
-        metavar="FILE",
-        help="Monitor a log file with AI analysis in real-time"
-    )
-    
-    parser.add_argument(
-        "--watch",
-        metavar="FILE",
-        help="Watch a log file in real-time without AI analysis (similar to 'tail -f')"
-    )
-    
-    parser.add_argument(
-        "--status", "-S",
-        action="store_true",
-        help="Show system and qcmd status information"
-    )
-    
-    # Parse the arguments
-    args = parser.parse_args()
+    # Check for updates (unless disabled in config)
+    if config.get('check_updates', True):
+        check_for_updates()
     
     # Process utility commands first (no prompt required)
     
-    # If explicitly checking for updates
+    # If checking for updates
     if args.check_updates:
         print(f"{Colors.BLUE}Current version: {Colors.BOLD}{__version__}{Colors.END}")
         print(f"{Colors.GREEN}Checking for updates...{Colors.END}")
         check_for_updates(force_display=True)
         return
     
-    # If setting configuration
+    # If setting configuration via command line
     if args.config:
-        if args.config.lower() == 'reset':
-            # Reset to defaults
-            config = {
-                'model': DEFAULT_MODEL,
-                'temperature': 0.2,
-                'auto_mode': False,
-                'analyze_errors': False,
-                'timeout': REQUEST_TIMEOUT,
-                'favorite_logs': [],
-                'colors': {},
-                'ui': {
-                    'show_iraq_banner': True,
-                    'show_logo': True,
-                    'compact_mode': False,
-                    'verbose_logging': True,
-                }
-            }
-            save_config(config)
-            Colors.reset_to_defaults()
-            print(f"{Colors.GREEN}Configuration reset to defaults.{Colors.END}")
+        parts = args.config.split('=', 1)
+        if len(parts) == 2:
+            key, value = parts
+            handle_config_command(f"set {key} {value}")
         else:
-            parts = args.config.split('=', 1)
-            if len(parts) == 2:
-                key, value = parts
-                handle_config_command(['set', key, value])
-            else:
-                print(f"{Colors.YELLOW}Usage: --config KEY=VALUE or --config reset{Colors.END}")
-                print(f"{Colors.YELLOW}Example: --config ui.show_iraq_banner=false{Colors.END}")
+            print(f"{Colors.YELLOW}Usage: --config KEY=VALUE{Colors.END}")
+            print(f"{Colors.YELLOW}Example: --config model=llama2{Colors.END}")
         return
         
     # If showing status
@@ -2537,8 +2350,28 @@ def parse_args():
     
     # If starting interactive shell
     if args.shell:
-        # Use default temperature of 0.7 since it's not in the arguments
-        start_interactive_shell(args.auto, args.model, 0.7, 3)
+        # Create a session ID for this shell
+        session_id = f"shell_{int(time.time())}"
+        
+        # Register the session
+        save_session(session_id, {
+            "type": "interactive_shell",
+            "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "pid": os.getpid()
+        })
+        
+        try:
+            # Start the interactive shell
+            start_interactive_shell(
+                auto_mode_enabled=args.auto,
+                current_model=args.model,
+                current_temperature=config.get('temperature', 0.7),
+                max_attempts=config.get('max_attempts', 3)
+            )
+        finally:
+            # Clean up the session
+            end_session(session_id)
+            
         return
         
     # Handle log analysis
@@ -2547,7 +2380,7 @@ def parse_args():
         return
         
     if args.all_logs:
-        log_files = find_log_files()
+        log_files = find_log_files(include_system=True)
         if log_files:
             print(f"{Colors.GREEN}Found {len(log_files)} log files:{Colors.END}")
             selected_log = display_log_selection(log_files)
@@ -2565,21 +2398,46 @@ def parse_args():
         return
         
     if args.monitor:
-        if os.path.exists(args.monitor) and os.path.isfile(args.monitor):
-            analyze_log_file(args.monitor, args.model, True, True)
+        file_path = os.path.abspath(args.monitor)
+        # Create the file if it doesn't exist
+        if not os.path.exists(file_path):
+            try:
+                # Create an empty file
+                with open(file_path, 'w') as f:
+                    pass
+                print(f"{Colors.GREEN}Created new log file: {file_path}{Colors.END}")
+            except Exception as e:
+                print(f"{Colors.RED}Error creating file {file_path}: {e}{Colors.END}")
+                return
+        
+        if os.path.isfile(file_path):
+            analyze_log_file(file_path, args.model, True, True)
         else:
-            print(f"{Colors.RED}Error: File {args.monitor} does not exist or is not accessible.{Colors.END}")
+            print(f"{Colors.RED}Error: {file_path} is not a regular file.{Colors.END}")
         return
         
     if args.watch:
-        if os.path.exists(args.watch) and os.path.isfile(args.watch):
-            analyze_log_file(args.watch, args.model, True, False)
+        file_path = os.path.abspath(args.watch)
+        # Create the file if it doesn't exist
+        if not os.path.exists(file_path):
+            try:
+                # Create an empty file
+                with open(file_path, 'w') as f:
+                    pass
+                print(f"{Colors.GREEN}Created new log file: {file_path}{Colors.END}")
+            except Exception as e:
+                print(f"{Colors.RED}Error creating file {file_path}: {e}{Colors.END}")
+                return
+                
+        if os.path.isfile(file_path):
+            analyze_log_file(file_path, args.model, True, False)
         else:
-            print(f"{Colors.RED}Error: File {args.watch} does not exist or is not accessible.{Colors.END}")
+            print(f"{Colors.RED}Error: {file_path} is not a regular file.{Colors.END}")
         return
     
     # Ensure a prompt is provided for command generation
     if not args.prompt:
+        parser = argparse.ArgumentParser()
         parser.print_help()
         print_examples()
         return
@@ -2587,6 +2445,9 @@ def parse_args():
     # Generate the command
     print(f"Generating command for: {args.prompt}")
     command = generate_command(args.prompt, args.model)
+    
+    # Save to history
+    save_to_history(args.prompt)
     
     # Display the generated command
     print(f"\nGenerated Command: {command}")
@@ -2617,6 +2478,92 @@ def parse_args():
             execute_command(command, args.analyze, args.model)
         else:
             print("Command execution cancelled.")
+
+def parse_args():
+    """
+    Parse command line arguments
+    
+    Returns:
+        Parsed arguments
+    """
+    parser = argparse.ArgumentParser(description="Command Generator Tool with AI analysis capabilities")
+    parser.add_argument('prompt', nargs='?', 
+                        help='Describe the command you want to generate')
+    
+    # Model selection
+    parser.add_argument('--model', type=str, default=None,
+                        help=f'Model to use (default: {DEFAULT_MODEL})')
+    parser.add_argument('--list-models', action='store_true',
+                        help='List available models')
+    
+    # Execution options
+    parser.add_argument('--execute', action='store_true',
+                        help='Execute the generated command (with confirmation)')
+    parser.add_argument('--yes', action='store_true',
+                        help='Execute command without confirmation')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Print the command without executing it')
+    parser.add_argument('--analyze', action='store_true',
+                        help='Analyze command output and provide assistance with errors')
+    
+    # Special modes
+    parser.add_argument('--auto', action='store_true',
+                        help='Auto mode: keep fixing errors until command succeeds')
+    parser.add_argument('--shell', action='store_true',
+                        help='Start interactive shell for multiple commands')
+    parser.add_argument('--check-updates', action='store_true',
+                        help='Check for package updates')
+    
+    # Configuration
+    parser.add_argument('--config', type=str, metavar='KEY=VALUE',
+                        help='Set configuration option (e.g., --config model=llama2)')
+    
+    # Log analysis
+    parser.add_argument('--logs', action='store_true',
+                        help='List log files for analysis')
+    parser.add_argument('--all-logs', action='store_true',
+                        help='List all log files including system logs')
+    parser.add_argument('--analyze-file', type=str, metavar='FILE',
+                        help='Analyze the specified file')
+    parser.add_argument('--monitor', type=str, metavar='FILE',
+                        help='Monitor log file for changes and analyze them')
+    parser.add_argument('--watch', type=str, metavar='FILE',
+                        help='Watch log file for changes without AI analysis')
+    
+    # System status
+    parser.add_argument('--status', action='store_true',
+                        help='Show QCMD system status')
+                        
+    # UI customization options
+    parser.add_argument('--no-banner', action='store_true',
+                        help='Disable the IRAQ banner display')
+    parser.add_argument('--no-progress', action='store_true',
+                        help='Disable progress bar animations')
+    parser.add_argument('--compact', action='store_true',
+                        help='Enable compact mode for minimal output')
+    parser.add_argument('--banner-font', type=str,
+                        help='Set the font to use for the banner (pyfiglet font name)')
+    
+    args = parser.parse_args()
+    
+    # Load config
+    config = load_config()
+    
+    # Apply UI customization options to config
+    if args.no_banner:
+        config['ui']['show_iraq_banner'] = False
+    if args.no_progress:
+        config['ui']['show_progress_bar'] = False
+    if args.compact:
+        config['ui']['compact_mode'] = True
+    if args.banner_font:
+        config['ui']['banner_font'] = args.banner_font
+        
+    # Save config if UI options were changed
+    if args.no_banner or args.no_progress or args.compact or args.banner_font:
+        save_config(config)
+    
+    return args
 
 def is_dangerous_command(command: str) -> bool:
     """
