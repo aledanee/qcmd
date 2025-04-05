@@ -1224,7 +1224,7 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
     # Function to run in a separate thread
     def monitor_log():
         nonlocal last_position
-        nonlocal analyze  # Make analyze accessible for toggling
+        # analyze is already accessible from parent scope, no need for nonlocal
         
         print(f"{Colors.GREEN}Starting continuous log {'monitoring with analysis' if analyze else 'watching'} for {Colors.BOLD}{log_file}{Colors.END}")
         print(f"{Colors.YELLOW}Press Ctrl+C to stop {'monitoring' if analyze else 'watching'}.{Colors.END}")
