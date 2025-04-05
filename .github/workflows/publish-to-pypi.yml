@@ -4,7 +4,7 @@ on:
   release:
     types: [created]
 
-# Add permissions for trusted publishing
+# These permissions are still good to have for security
 permissions:
   id-token: write
   contents: read
@@ -41,8 +41,9 @@ jobs:
           touch requirements.txt
         fi
         python -m build
-    - name: Publish package
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        user: __token__
-        password: ${{ secrets.PYPI_API_TOKEN }} 
+    - name: Publish package using twine
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      run: |
+        twine upload dist/* 
