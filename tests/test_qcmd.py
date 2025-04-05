@@ -14,10 +14,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 # Import functions to test
 try:
-    from qcmd import is_dangerous_command, save_config, load_config
+    from qcmd_cli.qcmd import is_dangerous_command, save_config, load_config
 except ImportError:
     # If running as script
-    print("Could not import qcmd module. Make sure it's in your PYTHONPATH.")
+    print("Could not import qcmd_cli module. Make sure it's in your PYTHONPATH.")
     sys.exit(1)
 
 
@@ -69,10 +69,11 @@ class TestQcmdConfig(unittest.TestCase):
             "temperature": 0.5,
             "timeout": 30,
             "favorite_logs": ["/var/log/test.log"],
-            "auto_mode": False
+            "auto_mode": False,
+            "analyze_errors": False
         }
         
-        with patch('qcmd.CONFIG_FILE', self.config_path):
+        with patch('qcmd_cli.qcmd.CONFIG_FILE', self.config_path):
             save_config(test_config)
             loaded_config = load_config()
             
@@ -80,6 +81,7 @@ class TestQcmdConfig(unittest.TestCase):
         self.assertEqual(loaded_config["temperature"], test_config["temperature"])
         self.assertEqual(loaded_config["timeout"], test_config["timeout"])
         self.assertEqual(loaded_config["favorite_logs"], test_config["favorite_logs"])
+        self.assertEqual(loaded_config["analyze_errors"], test_config["analyze_errors"])
 
 
 if __name__ == '__main__':

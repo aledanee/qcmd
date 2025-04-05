@@ -1999,5 +1999,21 @@ def parse_args():
         else:
             print("Command execution cancelled.")
 
+def is_dangerous_command(command: str) -> bool:
+    """
+    Check if a command contains potentially dangerous patterns.
+    
+    Args:
+        command: The command to check
+        
+    Returns:
+        True if the command is potentially dangerous, False otherwise
+    """
+    command_lower = command.lower()
+    for pattern in DANGEROUS_PATTERNS:
+        if pattern.lower() in command_lower:
+            return True
+    return False
+
 if __name__ == "__main__":
     main() 
