@@ -1946,7 +1946,8 @@ def parse_args():
     
     # If starting interactive shell
     if args.shell:
-        start_interactive_shell(args.auto, args.model, args.temperature, 3)
+        # Use default temperature of 0.7 since it's not in the arguments
+        start_interactive_shell(args.auto, args.model, 0.7, 3)
         return
         
     # Ensure a prompt is provided
