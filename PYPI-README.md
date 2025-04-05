@@ -2,7 +2,7 @@
 
 A simple command-line tool that generates shell commands using local AI models via Ollama.
 
-**Version 1.0.3**
+**Version 1.0.5**
 
 ## Overview
 
@@ -52,6 +52,20 @@ qcmd -A "find Python files modified today"
 # Interactive shell
 qcmd -s
 ```
+
+## What's New in 1.0.5
+
+- Fixed compatibility with Python 3.12+ by removing pkg_resources dependency
+- Improved version detection using Python standard library (importlib.metadata)
+- Removed external dependency requirements for better cross-version compatibility
+- Enhanced installation reliability across all Python versions
+- Simplified update checking mechanism
+
+## What's New in 1.0.4
+
+- Initial attempt at fixing Python 3.12+ compatibility issues
+- Updated documentation for better clarity
+- Minor code improvements
 
 ## What's New in 1.0.3
 

@@ -20,8 +20,13 @@ import threading
 import time
 import re
 import configparser
+import pkg_resources
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple, List
+try:
+    from qcmd_cli import __version__
+except ImportError:
+    __version__ = "1.0.0"  # fallback if not installed as package
 
 # Ollama API settings
 OLLAMA_API = "http://127.0.0.1:11434/api"
@@ -2027,6 +2032,12 @@ def main() -> None:
         help="Add a log file to favorites"
     )
     
+    config_group.add_argument(
+        "--check-updates",
+        action="store_true",
+        help="Check for available updates"
+    )
+    
     # Add history search option
     shell_group.add_argument(
         "--history-search",
@@ -2094,6 +2105,14 @@ def main() -> None:
     # If logs mode is requested, handle log analysis
     if args.logs:
         handle_log_analysis(args.model)
+        return
+        
+    # If explicitly checking for updates
+    if args.check_updates:
+        # We add a version display and then call the update checker
+        print(f"{Colors.BLUE}Current version: {Colors.BOLD}{__version__}{Colors.END}")
+        print(f"{Colors.GREEN}Checking for updates...{Colors.END}")
+        check_for_updates(force_display=True)
         return
         
     # Ensure a prompt is provided
@@ -2556,6 +2575,34 @@ def disable_colors():
     for attr in dir(Colors):
         if not attr.startswith('__'):
             setattr(Colors, attr, '')
+
+def check_for_updates(force_display: bool = False) -> None:
+    """
+    Check if there's a newer version of the package available on PyPI
+    
+    Args:
+        force_display: Whether to display a message even if no update is found
+    """
+    try:
+        # Get installed version
+        installed_version = __version__
+        
+        # Check latest version on PyPI
+        response = requests.get("https://pypi.org/pypi/ibrahimiq-qcmd/json", timeout=3)
+        if response.status_code == 200:
+            latest_version = response.json()["info"]["version"]
+            
+            # Compare versions
+            if installed_version != latest_version:
+                print(f"\n{Colors.YELLOW}New version available: {Colors.BOLD}{latest_version}{Colors.END}")
+                print(f"{Colors.YELLOW}You have: {installed_version}{Colors.END}")
+                print(f"{Colors.YELLOW}Update with: {Colors.BOLD}pip install --upgrade ibrahimiq-qcmd{Colors.END}")
+            elif force_display:
+                print(f"{Colors.GREEN}You have the latest version: {Colors.BOLD}{installed_version}{Colors.END}")
+    except Exception as e:
+        if force_display:
+            print(f"{Colors.YELLOW}Could not check for updates: {e}{Colors.END}")
+        # If update check fails, just skip it silently otherwise
 
 if __name__ == "__main__":
     try:

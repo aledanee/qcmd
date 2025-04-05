@@ -22,9 +22,23 @@ import re
 import configparser
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple, List
-import pkg_resources
 
-from qcmd_cli import __version__
+try:
+    # For Python 3.8+
+    from importlib.metadata import version as get_version
+    try:
+        __version__ = get_version("ibrahimiq-qcmd")
+    except Exception:
+        # Use version from __init__.py
+        from qcmd_cli import __version__
+except ImportError:
+    # Fallback for older Python versions
+    try:
+        import pkg_resources
+        __version__ = pkg_resources.get_distribution("ibrahimiq-qcmd").version
+    except Exception:
+        # Use version from __init__.py
+        from qcmd_cli import __version__
 
 # Ollama API settings
 OLLAMA_API = "http://127.0.0.1:11434/api"
@@ -1799,15 +1813,9 @@ def check_for_updates(force_display: bool = False) -> None:
         force_display: Whether to display a message even if no update is found
     """
     try:
-        # Get installed version
-        try:
-            installed_version = pkg_resources.get_distribution("ibrahimiq-qcmd").version
-        except (pkg_resources.DistributionNotFound, Exception):
-            # Package not installed via pip, use version from code
-            installed_version = __version__
-            if force_display:
-                print(f"{Colors.YELLOW}Note: You're running a local/development version.{Colors.END}")
-
+        # Get installed version - use version from module directly
+        installed_version = __version__
+        
         # Check latest version on PyPI
         response = requests.get("https://pypi.org/pypi/ibrahimiq-qcmd/json", timeout=3)
         if response.status_code == 200:
