@@ -87,6 +87,7 @@ class Colors:
         'YELLOW': '\033[93m',
         'RED': '\033[91m',
         'WHITE': '\033[97m',
+        'BLACK': '\033[30;47m',  # Black text on white background
         'BOLD': '\033[1m',
         'UNDERLINE': '\033[4m',
         'END': '\033[0m'
@@ -100,6 +101,7 @@ class Colors:
     YELLOW = _DEFAULTS['YELLOW']
     RED = _DEFAULTS['RED']
     WHITE = _DEFAULTS['WHITE']
+    BLACK = _DEFAULTS['BLACK']
     BOLD = _DEFAULTS['BOLD']
     UNDERLINE = _DEFAULTS['UNDERLINE']
     END = _DEFAULTS['END']
@@ -129,6 +131,7 @@ class Colors:
             'YELLOW': cls.YELLOW,
             'RED': cls.RED,
             'WHITE': cls.WHITE,
+            'BLACK': cls.BLACK,
             'BOLD': cls.BOLD,
             'UNDERLINE': cls.UNDERLINE,
             'END': cls.END
@@ -2067,9 +2070,13 @@ def print_iraq_banner():
     Print a stylized IRAQ banner with colors using pyfiglet.
     """
     config = load_config()
-    if config.get('ui', {}).get('show_iraq_banner', True):
-        # Don't waste space in compact mode
-        if config.get('ui', {}).get('compact_mode', False):
+    
+    # Check if we should force the banner to display (used by post-install script)
+    force_banner = os.environ.get('QCMD_FORCE_BANNER', '').lower() == 'true'
+    
+    if force_banner or config.get('ui', {}).get('show_iraq_banner', True):
+        # Don't waste space in compact mode (unless forced)
+        if not force_banner and config.get('ui', {}).get('compact_mode', False):
             print(f"{Colors.GREEN}Welcome to QCMD - Iraqi-powered command generation tool!{Colors.END}")
             return
             
@@ -2080,11 +2087,11 @@ def print_iraq_banner():
             figlet = Figlet(font=font)
             iraq_text = figlet.renderText('IRAQ')
             
-            # Print the text with green color
-            print(f"{Colors.GREEN}{iraq_text}{Colors.END}")
+            # Print the text with green color and added styling
+            print(f"{Colors.GREEN}{Colors.BOLD}{iraq_text}{Colors.END}")
         except ImportError:
             # Fallback if pyfiglet is not installed
-            print(f"\n{Colors.GREEN}")
+            print(f"\n{Colors.GREEN}{Colors.BOLD}")
             print(" _____ _____        _____  ")
             print("|_   _|  __ \\      / ____| ")
             print("  | | | |__) |    | |    _ ") 
@@ -2093,10 +2100,10 @@ def print_iraq_banner():
             print("|_____|_|  \\_\\     \\_____(_)")
             print(f"{Colors.END}")
         
-        # Add Iraq flag colors
+        # Add Iraq flag colors (red, white, black)
         print(f"{Colors.RED}    ████████████████████████████████{Colors.END}")
         print(f"{Colors.WHITE}    ████████████████████████████████{Colors.END}")
-        print(f"{Colors.GREEN}    ████████████████████████████████{Colors.END}")
+        print(f"{Colors.BLACK}    ████████████████████████████████{Colors.END}")
         
         print(f"{Colors.YELLOW}Command Generation Tool - Version: {__version__}{Colors.END}")
         print()
@@ -2141,10 +2148,10 @@ def show_download_progress(total=20, message="Initializing QCMD with Iraqi excel
             white_length = min(section_length, filled_length)
             filled_length -= white_length
             
-            green_length = filled_length  # Remainder goes to green
+            black_length = filled_length  # Remainder goes to black
             
-            # Create the colored progress bar
-            bar = f"{Colors.RED}{'█' * red_length}{Colors.WHITE}{'█' * white_length}{Colors.GREEN}{'█' * green_length}{Colors.END}{' ' * empty_length}"
+            # Create the colored progress bar with Iraqi flag colors
+            bar = f"{Colors.RED}{'█' * red_length}{Colors.WHITE}{'█' * white_length}{Colors.BLACK}{'█' * black_length}{Colors.END}{' ' * empty_length}"
         else:
             bar = ' ' * bar_width
         

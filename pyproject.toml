@@ -44,4 +44,5 @@ py-modules = []
 qcmd_cli = ["*.bash"]
 
 [project.scripts]
-qcmd = "qcmd_cli.qcmd:main" 
+qcmd = "qcmd_cli.qcmd:main"
+qcmd-post-install = "qcmd_cli.post_install:main" 
