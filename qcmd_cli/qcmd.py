@@ -574,73 +574,54 @@ def print_examples():
     print(f"{Colors.YELLOW}💡 Tip: Auto mode will execute commands automatically without asking for confirmation{Colors.END}")
     print(f"{Colors.YELLOW}💡 Tip: Install tab completion with the setup-qcmd.sh script{Colors.END}")
 
-def run_interactive_shell(model: str = DEFAULT_MODEL, temperature: float = 0.2, 
-                       analyze_errors: bool = False, auto_mode_enabled: bool = False,
-                       max_attempts: int = 3) -> None:
+def start_interactive_shell(auto_mode_enabled: bool = False, current_model: str = DEFAULT_MODEL, current_temperature: float = 0.7, max_attempts: int = 3) -> None:
     """
-    Run an interactive shell for continuous command generation
+    Start the interactive shell for qcmd.
     
     Args:
-        model: The model to use for command generation
-        temperature: Temperature for generation
-        analyze_errors: Whether to analyze errors if commands fail
-        auto_mode_enabled: Whether to use auto mode by default
-        max_attempts: Maximum number of fix attempts in auto mode
+        auto_mode_enabled: Whether to start in auto mode
+        current_model: The model to use
+        current_temperature: The temperature to use for generation
+        max_attempts: Maximum number of attempts for auto mode
     """
-    print_cool_header()
-    print(f"{Colors.GREEN}Starting interactive qcmd shell...{Colors.END}")
-    print(f"{Colors.CYAN}• Type your command description")
-    print(f"• Use {Colors.BOLD}/help{Colors.END}{Colors.CYAN} to see available commands")
-    print(f"• Use {Colors.BOLD}/exit{Colors.END}{Colors.CYAN} or Ctrl+D to exit{Colors.END}")
-    print()
-    
-    # Set up readline for history in the interactive shell
-    history_file = os.path.expanduser("~/.qcmd_shell_history")
+    # Ensure we can save history
     try:
-        readline.read_history_file(history_file)
-        readline.set_history_length(100)
-    except FileNotFoundError:
+        history_dir = os.path.dirname(HISTORY_FILE)
+        if not os.path.exists(history_dir):
+            os.makedirs(history_dir, exist_ok=True)
+    except Exception:
+        pass
+        
+    # Load history if it exists
+    try:
+        if os.path.exists(HISTORY_FILE):
+            readline.read_history_file(HISTORY_FILE)
+            readline.set_history_length(MAX_HISTORY)
+    except Exception:
         pass
     
-    # Completion function for readline
-    def completer(text, state):
-        # Shell commands
-        commands = [
-            "/help", "/exit", "/quit", "/history", "/history-search", "/models", 
-            "/auto", "/manual", "/analyze", "/model", "/temperature",
-            "/execute", "/dry-run", "/logs", "/analyze-file", "/monitor", "/all-logs"
-        ]
-        
-        # Filter commands based on input
-        matches = [c for c in commands if c.startswith(text)]
-        
-        # Return match or None if no more matches
-        if state < len(matches):
-            return matches[state]
-        else:
-            return None
+    print(f"{Colors.GREEN}Welcome to {Colors.BOLD}qcmd{Colors.END}{Colors.GREEN}!{Colors.END}")
+    print(f"{Colors.GREEN}Enter a description of the command you want to run.{Colors.END}")
+    print(f"{Colors.GREEN}Type {Colors.BOLD}/help{Colors.END}{Colors.GREEN} for available commands.{Colors.END}")
+    print(f"{Colors.GREEN}Using model: {Colors.BOLD}{current_model}{Colors.END}")
     
-    # Set up readline completer
-    readline.set_completer(completer)
-    readline.parse_and_bind("tab: complete")
-    
-    # Main loop
-    current_model = model
-    current_temperature = temperature
-    current_analyze = analyze_errors
+    # Set initial state
+    current_analyze = False
     current_auto = auto_mode_enabled
     
+    # Initialize command variable for /execute and other commands
+    command = ""
+    
+    # Main interactive shell loop
     while True:
         try:
-            # Display prompt with current model
-            prompt = input(f"\n{Colors.GREEN}qcmd ({Colors.BOLD}{current_model}{Colors.END}"
-                          f"{Colors.GREEN}) > {Colors.END}").strip()
+            # Initialize command variable at the top level of the loop
+            command = ""
             
-            # Save to readline history
-            if prompt and not prompt.startswith("/"):
-                readline.add_history(prompt)
-                
-            # Handle empty input
+            # Get prompt from user
+            prompt = input(f"\n{Colors.BOLD}qcmd> {Colors.END}").strip()
+            
+            # Skip empty prompts
             if not prompt:
                 continue
                 
@@ -836,7 +817,7 @@ def run_interactive_shell(model: str = DEFAULT_MODEL, temperature: float = 0.2,
     
     # Save readline history
     try:
-        readline.write_history_file(history_file)
+        readline.write_history_file(HISTORY_FILE)
     except Exception:
         pass
 
@@ -918,17 +899,21 @@ Please provide ONLY the corrected command with no formatting:"""
     except Exception as e:
         return command  # Return original command on error
 
-def auto_mode(prompt: str, model: str = DEFAULT_MODEL, max_attempts: int = 3, temperature: float = 0.2) -> None:
+def auto_mode(prompt: str, model: str = DEFAULT_MODEL, max_attempts: int = 3, temperature: float = 0.7) -> None:
     """
-    Run in auto mode: generate, execute, and fix automatically.
+    Run in auto mode: generate, execute, and fix the command automatically.
     
     Args:
-        prompt: The natural language description of what command to generate
+        prompt: The user's prompt for generating a command
         model: The model to use
-        max_attempts: Maximum number of attempts to fix a command
-        temperature: Temperature for generation
+        max_attempts: Maximum number of attempts to fix the command
+        temperature: The temperature to use for generation
     """
     print(f"{Colors.GREEN}🤖 Auto mode activated for: {Colors.BOLD}{prompt}{Colors.END}")
+    
+    # Initialize output variable to store command execution output
+    output = ""
+    command = ""
     
     for attempt in range(1, max_attempts + 1):
         if attempt == 1:
@@ -1953,7 +1938,7 @@ def parse_args():
     
     # If starting interactive shell
     if args.shell:
-        run_interactive_shell(args.model, 0.2, args.analyze, args.auto)
+        start_interactive_shell(args.auto, args.model, args.temperature, 3)
         return
         
     # Ensure a prompt is provided
