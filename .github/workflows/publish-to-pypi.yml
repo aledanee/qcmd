@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.ref }}
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -19,8 +21,9 @@ jobs:
         pip install build twine
     - name: Update version
       run: |
-        # Extract version from the GitHub release tag (e.g., v1.0.2 -> 1.0.2)
+        # Extract version from the GitHub release tag (e.g., v1.0.3 -> 1.0.3)
         VERSION=${GITHUB_REF#refs/tags/v}
+        echo "Publishing version $VERSION"
         # Update version in pyproject.toml
         sed -i "s/version = \"[0-9]*\.[0-9]*\.[0-9]*\"/version = \"$VERSION\"/" pyproject.toml
         # Update version in qcmd_cli/__init__.py
