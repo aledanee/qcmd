@@ -77,15 +77,61 @@ DANGEROUS_PATTERNS = [
 
 # Terminal colors for better output
 class Colors:
-    HEADER = '\033[95m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-    END = '\033[0m'
+    # Default color values
+    _DEFAULTS = {
+        'HEADER': '\033[95m',
+        'BLUE': '\033[94m',
+        'CYAN': '\033[96m',
+        'GREEN': '\033[92m',
+        'YELLOW': '\033[93m',
+        'RED': '\033[91m',
+        'WHITE': '\033[97m',
+        'BOLD': '\033[1m',
+        'UNDERLINE': '\033[4m',
+        'END': '\033[0m'
+    }
+    
+    # Class variables with default values
+    HEADER = _DEFAULTS['HEADER']
+    BLUE = _DEFAULTS['BLUE']
+    CYAN = _DEFAULTS['CYAN']
+    GREEN = _DEFAULTS['GREEN']
+    YELLOW = _DEFAULTS['YELLOW']
+    RED = _DEFAULTS['RED']
+    WHITE = _DEFAULTS['WHITE']
+    BOLD = _DEFAULTS['BOLD']
+    UNDERLINE = _DEFAULTS['UNDERLINE']
+    END = _DEFAULTS['END']
+    
+    @classmethod
+    def load_from_config(cls, config):
+        """Load colors from configuration"""
+        if 'colors' in config:
+            for color_name, color_value in config['colors'].items():
+                if hasattr(cls, color_name.upper()) and color_value:
+                    setattr(cls, color_name.upper(), color_value)
+    
+    @classmethod
+    def reset_to_defaults(cls):
+        """Reset colors to default values"""
+        for color_name, color_value in cls._DEFAULTS.items():
+            setattr(cls, color_name, color_value)
+    
+    @classmethod
+    def get_all_colors(cls):
+        """Get all color values as a dictionary"""
+        return {
+            'HEADER': cls.HEADER,
+            'BLUE': cls.BLUE,
+            'CYAN': cls.CYAN, 
+            'GREEN': cls.GREEN,
+            'YELLOW': cls.YELLOW,
+            'RED': cls.RED,
+            'WHITE': cls.WHITE,
+            'BOLD': cls.BOLD,
+            'UNDERLINE': cls.UNDERLINE,
+            'END': cls.END
+        }
 
 # Global variables to track active processes
 ACTIVE_LOG_MONITORS = {}
@@ -739,6 +785,7 @@ def start_interactive_shell(auto_mode_enabled: bool = False, current_model: str 
                         print(f"  {Colors.BOLD}/monitor <path>{Colors.END}       Monitor a file continuously with AI analysis")
                         print(f"  {Colors.BOLD}/watch <path>{Colors.END}         Watch a file continuously without AI analysis")
                         print(f"  {Colors.BOLD}/status{Colors.END}         Show system and qcmd status information")
+                        print(f"  {Colors.BOLD}/config{Colors.END}         Show and modify configuration settings")
                         
                         print(f"\n{Colors.YELLOW}Current settings:{Colors.END}")
                         print(f"  Model: {Colors.BOLD}{current_model}{Colors.END}")
@@ -873,6 +920,13 @@ def start_interactive_shell(auto_mode_enabled: bool = False, current_model: str 
                     elif cmd == "/status":
                         display_system_status()
                         
+                    elif cmd == "/config":
+                        if len(parts) > 1:
+                            args = parts[1].split()
+                            handle_config_command(args)
+                        else:
+                            handle_config_command([])
+                    
                     else:
                         print(f"{Colors.YELLOW}Unknown command: {cmd}{Colors.END}")
                         print(f"{Colors.YELLOW}Type /help for available commands{Colors.END}")
@@ -1955,6 +2009,13 @@ def load_config() -> Dict:
         'analyze_errors': False,
         'timeout': REQUEST_TIMEOUT,
         'favorite_logs': [],
+        'colors': {},
+        'ui': {
+            'show_iraq_banner': True,
+            'show_logo': True,
+            'compact_mode': False,
+            'verbose_logging': True,
+        }
     }
     
     if os.path.exists(CONFIG_FILE):
@@ -1976,9 +2037,23 @@ def load_config() -> Dict:
             
             if 'logs' in parser and 'favorites' in parser['logs']:
                 config['favorite_logs'] = parser['logs']['favorites'].split(',')
+            
+            # Load color customizations
+            if 'colors' in parser:
+                for key in parser['colors']:
+                    config['colors'][key.upper()] = parser['colors'][key]
+            
+            # Load UI customizations
+            if 'ui' in parser:
+                for key in ['show_iraq_banner', 'show_logo', 'compact_mode', 'verbose_logging']:
+                    if key in parser['ui']:
+                        config['ui'][key] = parser['ui'].getboolean(key)
                 
         except (configparser.Error, ValueError) as e:
             print(f"{Colors.YELLOW}Warning: Could not parse config file: {e}{Colors.END}")
+    
+    # Apply color configuration
+    Colors.load_from_config(config)
     
     return config
 
@@ -2004,12 +2079,234 @@ def save_config(config: Dict) -> None:
             'favorites': ','.join(config['favorite_logs'])
         }
         
+        # Save color customizations
+        if 'colors' in config and config['colors']:
+            parser['colors'] = {}
+            for key, value in config['colors'].items():
+                parser['colors'][key.lower()] = value
+        
+        # Save UI customizations
+        if 'ui' in config:
+            parser['ui'] = {}
+            for key, value in config['ui'].items():
+                parser['ui'][key] = str(value)
+        
         os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
         with open(CONFIG_FILE, 'w') as f:
             parser.write(f)
             
     except (IOError, OSError) as e:
         print(f"{Colors.YELLOW}Warning: Could not save config file: {e}{Colors.END}")
+
+def print_iraq_banner():
+    """
+    Print a stylized IRAQ banner with colors using pyfiglet.
+    """
+    if load_config().get('ui', {}).get('show_iraq_banner', True):
+        # Don't waste space in compact mode
+        if load_config().get('ui', {}).get('compact_mode', False):
+            print(f"{Colors.GREEN}Welcome to QCMD - Iraqi-powered command generation tool!{Colors.END}")
+            return
+            
+        try:
+            # Use pyfiglet for stylized text
+            from pyfiglet import Figlet
+            figlet = Figlet(font='slant')
+            iraq_text = figlet.renderText('IRAQ')
+            
+            # Print the text with green color
+            print(f"{Colors.GREEN}{iraq_text}{Colors.END}")
+        except ImportError:
+            # Fallback if pyfiglet is not installed
+            print(f"\n{Colors.GREEN}")
+            print(" _____ _____        _____  ")
+            print("|_   _|  __ \\      / ____| ")
+            print("  | | | |__) |    | |    _ ") 
+            print("  | | |  _  /     | |   (_)")
+            print(" _| |_| | \\ \\     | |____ _ ")
+            print("|_____|_|  \\_\\     \\_____(_)")
+            print(f"{Colors.END}")
+        
+        # Add Iraq flag colors
+        print(f"{Colors.RED}    ████████████████████████████████{Colors.END}")
+        print(f"{Colors.WHITE}    ████████████████████████████████{Colors.END}")
+        print(f"{Colors.GREEN}    ████████████████████████████████{Colors.END}")
+        
+        print(f"{Colors.YELLOW}Command Generation Tool - Version: {__version__}{Colors.END}")
+        print()
+
+def show_download_progress(total=20, delay=0.05, message="Loading Iraqi magic"):
+    """
+    Display a cool download/loading animation with Iraqi colors.
+    
+    Args:
+        total: Total number of steps in the progress bar
+        delay: Delay between steps in seconds
+        message: Message to display during loading
+    """
+    import time
+    import sys
+    
+    # Don't show if in compact mode
+    if load_config().get('ui', {}).get('compact_mode', False):
+        return
+        
+    colors = [Colors.RED, Colors.WHITE, Colors.GREEN]
+    color_index = 0
+    
+    print(f"\n{message}:")
+    
+    # Progress bar
+    for i in range(total + 1):
+        # Calculate percentage
+        percent = i * 100 // total
+        
+        # Create the progress bar with Iraqi flag colors
+        bar = ""
+        for j in range(total):
+            if j < i:
+                bar += f"{colors[j % 3]}█{Colors.END}"
+            else:
+                bar += "░"
+                
+        # Print the bar and percentage
+        sys.stdout.write(f"\r[{bar}] {percent}%")
+        sys.stdout.flush()
+        
+        # Add a small delay for animation effect
+        time.sleep(delay)
+    
+    # Add a newline after the progress bar completes
+    print("\n")
+
+def handle_config_command(args):
+    """
+    Handle the /config command in the interactive shell
+    """
+    if not args:
+        # Show current configuration
+        config = load_config()
+        
+        print(f"\n{Colors.CYAN}{Colors.BOLD}Current Configuration:{Colors.END}")
+        print(f"{Colors.CYAN}{'='*50}{Colors.END}")
+        
+        print(f"{Colors.BOLD}General Settings:{Colors.END}")
+        print(f"  Model: {config['model']}")
+        print(f"  Temperature: {config['temperature']}")
+        print(f"  Auto Mode: {config['auto_mode']}")
+        print(f"  Analyze Errors: {config['analyze_errors']}")
+        print(f"  Timeout: {config['timeout']}")
+        
+        print(f"\n{Colors.BOLD}UI Settings:{Colors.END}")
+        for key, value in config.get('ui', {}).items():
+            print(f"  {key}: {value}")
+        
+        print(f"\n{Colors.BOLD}Color Settings:{Colors.END}")
+        for key, value in Colors.get_all_colors().items():
+            print(f"  {key}: {value}")
+        
+        print(f"\n{Colors.YELLOW}Use /config set <key> <value> to change settings{Colors.END}")
+        print(f"{Colors.YELLOW}Example: /config set ui.show_iraq_banner false{Colors.END}")
+        print(f"{Colors.YELLOW}Example: /config set colors.GREEN \\033[92m{Colors.END}")
+        print(f"{Colors.YELLOW}Use /config reset to restore defaults{Colors.END}")
+        return
+    
+    # Handle subcommands
+    cmd = args[0].lower()
+    
+    if cmd == 'reset':
+        # Reset all settings to defaults
+        config = {
+            'model': DEFAULT_MODEL,
+            'temperature': 0.2,
+            'auto_mode': False,
+            'analyze_errors': False,
+            'timeout': REQUEST_TIMEOUT,
+            'favorite_logs': [],
+            'colors': {},
+            'ui': {
+                'show_iraq_banner': True,
+                'show_logo': True,
+                'compact_mode': False,
+                'verbose_logging': True,
+            }
+        }
+        save_config(config)
+        Colors.reset_to_defaults()
+        print(f"{Colors.GREEN}Configuration reset to defaults.{Colors.END}")
+    
+    elif cmd == 'set' and len(args) >= 3:
+        # Set a configuration value
+        key = args[1]
+        value = ' '.join(args[2:])
+        
+        config = load_config()
+        
+        # Handle nested keys (e.g., ui.show_iraq_banner)
+        if '.' in key:
+            section, subkey = key.split('.', 1)
+            
+            if section.lower() == 'colors':
+                # Handle color settings
+                config['colors'][subkey.upper()] = value
+                Colors.load_from_config(config)
+                print(f"{Colors.GREEN}Color {subkey.upper()} set to {value}{Colors.END}")
+            
+            elif section.lower() == 'ui':
+                # Handle UI settings (convert to boolean)
+                if value.lower() in ('true', 'yes', '1', 'on'):
+                    config['ui'][subkey] = True
+                elif value.lower() in ('false', 'no', '0', 'off'):
+                    config['ui'][subkey] = False
+                else:
+                    config['ui'][subkey] = value
+                print(f"{Colors.GREEN}UI setting {subkey} set to {config['ui'][subkey]}{Colors.END}")
+            
+            else:
+                print(f"{Colors.RED}Unknown configuration section: {section}{Colors.END}")
+                return
+        
+        else:
+            # Handle top-level keys
+            if key in config:
+                # Convert value to appropriate type
+                if isinstance(config[key], bool):
+                    if value.lower() in ('true', 'yes', '1', 'on'):
+                        config[key] = True
+                    elif value.lower() in ('false', 'no', '0', 'off'):
+                        config[key] = False
+                    else:
+                        print(f"{Colors.RED}Invalid boolean value: {value}{Colors.END}")
+                        return
+                
+                elif isinstance(config[key], float):
+                    try:
+                        config[key] = float(value)
+                    except ValueError:
+                        print(f"{Colors.RED}Invalid float value: {value}{Colors.END}")
+                        return
+                
+                elif isinstance(config[key], int):
+                    try:
+                        config[key] = int(value)
+                    except ValueError:
+                        print(f"{Colors.RED}Invalid integer value: {value}{Colors.END}")
+                        return
+                
+                else:
+                    config[key] = value
+                
+                print(f"{Colors.GREEN}Setting {key} set to {config[key]}{Colors.END}")
+            
+            else:
+                print(f"{Colors.RED}Unknown configuration key: {key}{Colors.END}")
+                return
+        
+        # Save the updated configuration
+        save_config(config)
+    
+    else:
+        print(f"{Colors.YELLOW}Usage: /config [set <key> <value> | reset]{Colors.END}")
 
 def check_for_updates(force_display: bool = False) -> None:
     """
@@ -2044,6 +2341,12 @@ def main():
     Main entry point for the application when used as a package.
     """
     try:
+        # Show the Iraq banner
+        print_iraq_banner()
+        
+        # Show download progress
+        show_download_progress(message="Initializing QCMD with Iraqi excellence")
+        
         # Check for updates before parsing args
         check_for_updates()
         
@@ -2135,6 +2438,12 @@ def parse_args():
         help="Check for available updates"
     )
     
+    parser.add_argument(
+        "--config",
+        metavar="KEY=VALUE",
+        help="Set a configuration option (e.g. --config ui.show_iraq_banner=false)"
+    )
+    
     # Add argument parser options
     parser.add_argument(
         "--logs", "-L",
@@ -2182,6 +2491,38 @@ def parse_args():
         print(f"{Colors.BLUE}Current version: {Colors.BOLD}{__version__}{Colors.END}")
         print(f"{Colors.GREEN}Checking for updates...{Colors.END}")
         check_for_updates(force_display=True)
+        return
+    
+    # If setting configuration
+    if args.config:
+        if args.config.lower() == 'reset':
+            # Reset to defaults
+            config = {
+                'model': DEFAULT_MODEL,
+                'temperature': 0.2,
+                'auto_mode': False,
+                'analyze_errors': False,
+                'timeout': REQUEST_TIMEOUT,
+                'favorite_logs': [],
+                'colors': {},
+                'ui': {
+                    'show_iraq_banner': True,
+                    'show_logo': True,
+                    'compact_mode': False,
+                    'verbose_logging': True,
+                }
+            }
+            save_config(config)
+            Colors.reset_to_defaults()
+            print(f"{Colors.GREEN}Configuration reset to defaults.{Colors.END}")
+        else:
+            parts = args.config.split('=', 1)
+            if len(parts) == 2:
+                key, value = parts
+                handle_config_command(['set', key, value])
+            else:
+                print(f"{Colors.YELLOW}Usage: --config KEY=VALUE or --config reset{Colors.END}")
+                print(f"{Colors.YELLOW}Example: --config ui.show_iraq_banner=false{Colors.END}")
         return
         
     # If showing status
