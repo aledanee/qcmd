@@ -22,6 +22,7 @@ import re
 import configparser
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple, List
+import shutil
 
 try:
     # For Python 3.8+
@@ -84,6 +85,10 @@ class Colors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
     END = '\033[0m'
+
+# Global variables to track active processes
+ACTIVE_LOG_MONITORS = {}
+ACTIVE_SESSIONS = {}
 
 def save_to_history(prompt: str) -> None:
     """
@@ -576,6 +581,10 @@ def print_examples():
     print(f"    Inside shell: {Colors.BOLD}/monitor /path/to/file.log{Colors.END} (monitor with AI analysis)")
     print(f"    Inside shell: {Colors.BOLD}/watch /path/to/file.log{Colors.END} (watch without AI analysis)")
     
+    print(f"\n  {Colors.CYAN}System Status:{Colors.END}")
+    print(f"    {Colors.BOLD}qcmd --status{Colors.END} or {Colors.BOLD}qcmd -S{Colors.END} (show system and qcmd status)")
+    print(f"    Inside shell: {Colors.BOLD}/status{Colors.END} (show system and qcmd status)")
+    
     print(f"\n  {Colors.CYAN}Interactive shell:{Colors.END}")
     print(f"    {Colors.BOLD}qcmd --shell{Colors.END} or {Colors.BOLD}qcmd -s{Colors.END}")
     print(f"    Inside shell: {Colors.BOLD}/model llama2:7b{Colors.END} (change model)")
@@ -600,253 +609,288 @@ def start_interactive_shell(auto_mode_enabled: bool = False, current_model: str 
         current_temperature: The temperature to use for generation
         max_attempts: Maximum number of attempts for auto mode
     """
-    # Ensure we can save history
+    # Register this session
+    session_id = f"shell_{int(time.time())}"
+    ACTIVE_SESSIONS[session_id] = {
+        "type": "interactive_shell",
+        "model": current_model,
+        "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
     try:
-        history_dir = os.path.dirname(HISTORY_FILE)
-        if not os.path.exists(history_dir):
-            os.makedirs(history_dir, exist_ok=True)
-    except Exception:
-        pass
-        
-    # Load history if it exists
-    try:
-        if os.path.exists(HISTORY_FILE):
-            readline.read_history_file(HISTORY_FILE)
-            readline.set_history_length(MAX_HISTORY)
-    except Exception:
-        pass
-    
-    print(f"{Colors.GREEN}Welcome to {Colors.BOLD}qcmd{Colors.END}{Colors.GREEN}!{Colors.END}")
-    print(f"{Colors.GREEN}Enter a description of the command you want to run.{Colors.END}")
-    print(f"{Colors.GREEN}Type {Colors.BOLD}/help{Colors.END}{Colors.GREEN} for available commands.{Colors.END}")
-    print(f"{Colors.GREEN}Using model: {Colors.BOLD}{current_model}{Colors.END}")
-    
-    # Set initial state
-    current_analyze = False
-    current_auto = auto_mode_enabled
-    
-    # Initialize command variable for /execute and other commands
-    command = ""
-    
-    # Main interactive shell loop
-    while True:
+        # Ensure we can save history
         try:
-            # Initialize command variable at the top level of the loop
-            command = ""
-            
-            # Get prompt from user
-            prompt = input(f"\n{Colors.BOLD}qcmd> {Colors.END}").strip()
-            
-            # Skip empty prompts
-            if not prompt:
-                continue
-                
-            # Handle shell commands
-            if prompt.startswith("/"):
-                parts = prompt.split(maxsplit=1)
-                cmd = parts[0].lower()
-                
-                if cmd in ("/exit", "/quit"):
-                    print(f"{Colors.YELLOW}Exiting qcmd shell...{Colors.END}")
-                    break
-                    
-                elif cmd == "/help":
-                    print(f"\n{Colors.CYAN}{Colors.BOLD}Shell Commands:{Colors.END}")
-                    print(f"  {Colors.BOLD}/help{Colors.END}           Show this help message")
-                    print(f"  {Colors.BOLD}/exit{Colors.END}, {Colors.BOLD}/quit{Colors.END}   Exit the shell")
-                    print(f"  {Colors.BOLD}/history{Colors.END}        Show command history")
-                    print(f"  {Colors.BOLD}/history-search <term>{Colors.END}  Search command history")
-                    print(f"  {Colors.BOLD}/models{Colors.END}         List available models")
-                    print(f"  {Colors.BOLD}/model <name>{Colors.END}   Switch to a different model")
-                    print(f"  {Colors.BOLD}/temperature <t>{Colors.END} Set temperature (0.0-1.0)")
-                    print(f"  {Colors.BOLD}/auto{Colors.END}           Enable auto mode")
-                    print(f"  {Colors.BOLD}/manual{Colors.END}         Disable auto mode")
-                    print(f"  {Colors.BOLD}/analyze{Colors.END}        Toggle error analysis")
-                    print(f"  {Colors.BOLD}/execute{Colors.END}        Execute last generated command")
-                    print(f"  {Colors.BOLD}/dry-run{Colors.END}        Generate without executing")
-                    print(f"  {Colors.BOLD}/logs{Colors.END}           Find and analyze log files")
-                    print(f"  {Colors.BOLD}/all-logs{Colors.END}       Show all available log files")
-                    print(f"  {Colors.BOLD}/analyze-file <path>{Colors.END}  Analyze a specific file")
-                    print(f"  {Colors.BOLD}/monitor <path>{Colors.END}       Monitor a file continuously with AI analysis")
-                    print(f"  {Colors.BOLD}/watch <path>{Colors.END}         Watch a file continuously without AI analysis")
-                    
-                    print(f"\n{Colors.YELLOW}Current settings:{Colors.END}")
-                    print(f"  Model: {Colors.BOLD}{current_model}{Colors.END}")
-                    print(f"  Temperature: {Colors.BOLD}{current_temperature}{Colors.END}")
-                    print(f"  Auto mode: {Colors.BOLD}{current_auto}{Colors.END}")
-                    print(f"  Error analysis: {Colors.BOLD}{current_analyze}{Colors.END}")
-                
-                elif cmd == "/history":
-                    show_history()
-                    
-                elif cmd == "/history-search":
-                    if len(parts) > 1:
-                        search_term = parts[1]
-                        show_history(count=100, search_term=search_term)
-                    else:
-                        print(f"{Colors.YELLOW}Usage: /history-search <search_term>{Colors.END}")
-                    
-                elif cmd == "/models":
-                    list_models()
-                    
-                elif cmd == "/model":
-                    if len(parts) > 1:
-                        current_model = parts[1]
-                        print(f"{Colors.GREEN}Switched to model: {Colors.BOLD}{current_model}{Colors.END}")
-                    else:
-                        print(f"{Colors.YELLOW}Usage: /model <model_name>{Colors.END}")
-                        
-                elif cmd == "/temperature":
-                    if len(parts) > 1:
-                        try:
-                            t = float(parts[1])
-                            if 0 <= t <= 1:
-                                current_temperature = t
-                                print(f"{Colors.GREEN}Temperature set to: {Colors.BOLD}{current_temperature}{Colors.END}")
-                            else:
-                                print(f"{Colors.YELLOW}Temperature must be between 0 and 1{Colors.END}")
-                        except ValueError:
-                            print(f"{Colors.YELLOW}Invalid temperature value{Colors.END}")
-                    else:
-                        print(f"{Colors.YELLOW}Usage: /temperature <value>{Colors.END}")
-                        
-                elif cmd == "/auto":
-                    current_auto = True
-                    print(f"{Colors.GREEN}Auto mode {Colors.BOLD}enabled{Colors.END}")
-                    
-                elif cmd == "/manual":
-                    current_auto = False
-                    print(f"{Colors.GREEN}Auto mode {Colors.BOLD}disabled{Colors.END}")
-                    
-                elif cmd == "/analyze":
-                    current_analyze = not current_analyze
-                    state = "enabled" if current_analyze else "disabled"
-                    print(f"{Colors.GREEN}Error analysis {Colors.BOLD}{state}{Colors.END}")
-                    
-                elif cmd == "/execute":
-                    if 'command' in locals():
-                        print(f"\n{Colors.CYAN}Executing: {Colors.BOLD}{command}{Colors.END}")
-                        execute_command(command, current_analyze, current_model)
-                    else:
-                        print(f"{Colors.YELLOW}No command to execute. Generate one first.{Colors.END}")
-                        
-                elif cmd == "/dry-run":
-                    if len(parts) > 1:
-                        dry_run_prompt = parts[1]
-                        save_to_history(dry_run_prompt)
-                        print(f"{Colors.GREEN}Generating command for: {Colors.BOLD}{dry_run_prompt}{Colors.END}")
-                        command = generate_command(dry_run_prompt, current_model, current_temperature)
-                        print(f"\n{Colors.CYAN}Generated Command: {Colors.BOLD}{command}{Colors.END}")
-                        print(f"\n{Colors.YELLOW}Dry run - command not executed{Colors.END}")
-                    else:
-                        print(f"{Colors.YELLOW}Usage: /dry-run <prompt>{Colors.END}")
-                        
-                elif cmd == "/logs":
-                    handle_log_analysis(current_model)
-                    
-                elif cmd == "/all-logs":
-                    log_files = find_log_files()
-                    if log_files:
-                        print(f"{Colors.GREEN}Found {len(log_files)} log files:{Colors.END}")
-                        selected_log = display_log_selection(log_files)
-                        if selected_log:
-                            handle_log_selection(selected_log, current_model)
-                    else:
-                        print(f"{Colors.YELLOW}No accessible log files found on the system.{Colors.END}")
-                    
-                elif cmd == "/analyze-file":
-                    if len(parts) > 1:
-                        file_path = parts[1]
-                        if os.path.exists(file_path) and os.path.isfile(file_path):
-                            analyze_log_file(file_path, current_model, False)
-                        else:
-                            print(f"{Colors.RED}Error: File {file_path} does not exist or is not accessible.{Colors.END}")
-                    else:
-                        print(f"{Colors.YELLOW}Usage: /analyze-file <file_path>{Colors.END}")
-                
-                elif cmd == "/monitor":
-                    if len(parts) > 1:
-                        file_path = parts[1]
-                        if os.path.exists(file_path) and os.path.isfile(file_path):
-                            analyze_log_file(file_path, current_model, True, True)
-                        else:
-                            print(f"{Colors.RED}Error: File {file_path} does not exist or is not accessible.{Colors.END}")
-                    else:
-                        print(f"{Colors.YELLOW}Usage: /monitor <file_path>{Colors.END}")
-                
-                elif cmd == "/watch":
-                    if len(parts) > 1:
-                        file_path = parts[1]
-                        if os.path.exists(file_path) and os.path.isfile(file_path):
-                            analyze_log_file(file_path, current_model, True, False)
-                        else:
-                            print(f"{Colors.RED}Error: File {file_path} does not exist or is not accessible.{Colors.END}")
-                    else:
-                        print(f"{Colors.YELLOW}Usage: /watch <file_path>{Colors.END}")
-                        
-                else:
-                    print(f"{Colors.YELLOW}Unknown command: {cmd}{Colors.END}")
-                    print(f"{Colors.YELLOW}Type /help for available commands{Colors.END}")
-                    
-                continue
-            
-            # Normal command prompt - save to history
-            save_to_history(prompt)
-            
-            # Run in auto mode if enabled, otherwise normal mode
-            if current_auto:
-                auto_mode(prompt, current_model, max_attempts, current_temperature)
-            else:
-                # Generate the command
-                print(f"{Colors.GREEN}Generating command for: {Colors.BOLD}{prompt}{Colors.END}")
-                command = generate_command(prompt, current_model, current_temperature)
-                
-                # Display the generated command
-                print(f"\n{Colors.CYAN}Generated Command: {Colors.BOLD}{command}{Colors.END}")
-                
-                # Ask if user wants to execute
-                response = input(f"\n{Colors.GREEN}Do you want to execute this command? (y/n): {Colors.END}").lower()
-                if response in ["y", "yes"]:
-                    returncode, output = execute_command(command, current_analyze, current_model)
-                    
-                    # Analyze errors if requested and command failed
-                    if current_analyze and returncode != 0:
-                        print(f"\n{Colors.BLUE}Analyzing error...{Colors.END}")
-                        analysis = analyze_error(output, command, current_model)
-                        
-                        print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Error Analysis:{Colors.END}")
-                        print(f"{Colors.CYAN}{analysis}{Colors.END}")
-                        
-                        print(f"\n{Colors.GREEN}Would you like to fix this error and try again? (y/n): {Colors.END}", end="")
-                        if input().lower() in ["y", "yes"]:
-                            fixed_command = fix_command(command, output, current_model)
-                            print(f"\n{Colors.CYAN}Fixed Command: {Colors.BOLD}{fixed_command}{Colors.END}")
-                            
-                            print(f"\n{Colors.GREEN}Execute this fixed command? (y/n): {Colors.END}", end="")
-                            if input().lower() in ["y", "yes"]:
-                                execute_command(fixed_command, False, current_model)
-                else:
-                    print(f"{Colors.YELLOW}Command execution cancelled.{Colors.END}")
-            
-        except EOFError:
-            # Handle Ctrl+D
-            print(f"\n{Colors.YELLOW}Exiting qcmd shell...{Colors.END}")
-            break
-            
-        except KeyboardInterrupt:
-            # Handle Ctrl+C
-            print(f"\n{Colors.YELLOW}Command interrupted.{Colors.END}")
-            continue
-            
-        except Exception as e:
-            print(f"\n{Colors.RED}Error: {e}{Colors.END}")
-            continue
+            history_dir = os.path.dirname(HISTORY_FILE)
+            if not os.path.exists(history_dir):
+                os.makedirs(history_dir, exist_ok=True)
+        except Exception:
+            pass
+        
+        # Load history if it exists
+        try:
+            if os.path.exists(HISTORY_FILE):
+                readline.read_history_file(HISTORY_FILE)
+                readline.set_history_length(MAX_HISTORY)
+        except Exception:
+            pass
     
-    # Save readline history
-    try:
-        readline.write_history_file(HISTORY_FILE)
-    except Exception:
-        pass
+        print(f"{Colors.GREEN}Welcome to {Colors.BOLD}qcmd{Colors.END}{Colors.GREEN}!{Colors.END}")
+        print(f"{Colors.GREEN}Enter a description of the command you want to run.{Colors.END}")
+        print(f"{Colors.GREEN}Type {Colors.BOLD}/help{Colors.END}{Colors.GREEN} for available commands.{Colors.END}")
+        print(f"{Colors.GREEN}Using model: {Colors.BOLD}{current_model}{Colors.END}")
+        
+        # Set initial state
+        current_analyze = False
+        current_auto = auto_mode_enabled
+        
+        # Initialize command variable for /execute and other commands
+        command = ""
+        
+        # Main interactive shell loop
+        while True:
+            try:
+                # Initialize command variable at the top level of the loop
+                command = ""
+                
+                # Get prompt from user
+                prompt = input(f"\n{Colors.BOLD}qcmd> {Colors.END}").strip()
+                
+                # Skip empty prompts
+                if not prompt:
+                    continue
+                    
+                # Handle shell commands
+                if prompt.startswith("/"):
+                    parts = prompt.split(maxsplit=1)
+                    cmd = parts[0].lower()
+                    
+                    if cmd in ("/exit", "/quit"):
+                        print(f"{Colors.YELLOW}Exiting qcmd shell...{Colors.END}")
+                        break
+                        
+                    elif cmd == "/help":
+                        print(f"\n{Colors.CYAN}{Colors.BOLD}Shell Commands:{Colors.END}")
+                        print(f"  {Colors.BOLD}/help{Colors.END}           Show this help message")
+                        print(f"  {Colors.BOLD}/exit{Colors.END}, {Colors.BOLD}/quit{Colors.END}   Exit the shell")
+                        print(f"  {Colors.BOLD}/history{Colors.END}        Show command history")
+                        print(f"  {Colors.BOLD}/history-search <term>{Colors.END}  Search command history")
+                        print(f"  {Colors.BOLD}/models{Colors.END}         List available models")
+                        print(f"  {Colors.BOLD}/model <n>{Colors.END}   Switch to a different model")
+                        print(f"  {Colors.BOLD}/temperature <t>{Colors.END} Set temperature (0.0-1.0)")
+                        print(f"  {Colors.BOLD}/auto{Colors.END}           Enable auto mode")
+                        print(f"  {Colors.BOLD}/manual{Colors.END}         Disable auto mode")
+                        print(f"  {Colors.BOLD}/analyze{Colors.END}        Toggle error analysis")
+                        print(f"  {Colors.BOLD}/execute{Colors.END}        Execute last generated command")
+                        print(f"  {Colors.BOLD}/dry-run{Colors.END}        Generate without executing")
+                        print(f"  {Colors.BOLD}/logs{Colors.END}           Find and analyze log files")
+                        print(f"  {Colors.BOLD}/all-logs{Colors.END}       Show all available log files")
+                        print(f"  {Colors.BOLD}/analyze-file <path>{Colors.END}  Analyze a specific file")
+                        print(f"  {Colors.BOLD}/monitor <path>{Colors.END}       Monitor a file continuously with AI analysis")
+                        print(f"  {Colors.BOLD}/watch <path>{Colors.END}         Watch a file continuously without AI analysis")
+                        print(f"  {Colors.BOLD}/status{Colors.END}         Show system and qcmd status information")
+                        
+                        print(f"\n{Colors.YELLOW}Current settings:{Colors.END}")
+                        print(f"  Model: {Colors.BOLD}{current_model}{Colors.END}")
+                        print(f"  Temperature: {Colors.BOLD}{current_temperature}{Colors.END}")
+                        print(f"  Auto mode: {Colors.BOLD}{current_auto}{Colors.END}")
+                        print(f"  Error analysis: {Colors.BOLD}{current_analyze}{Colors.END}")
+                    
+                    elif cmd == "/history":
+                        show_history()
+                        
+                    elif cmd == "/history-search":
+                        if len(parts) > 1:
+                            search_term = parts[1]
+                            show_history(count=100, search_term=search_term)
+                        else:
+                            print(f"{Colors.YELLOW}Usage: /history-search <search_term>{Colors.END}")
+                        
+                    elif cmd == "/models":
+                        list_models()
+                        
+                    elif cmd == "/model":
+                        if len(parts) > 1:
+                            current_model = parts[1]
+                            print(f"{Colors.GREEN}Switched to model: {Colors.BOLD}{current_model}{Colors.END}")
+                        else:
+                            print(f"{Colors.YELLOW}Usage: /model <model_name>{Colors.END}")
+                        
+                    elif cmd == "/temperature":
+                        if len(parts) > 1:
+                            try:
+                                t = float(parts[1])
+                                if 0 <= t <= 1:
+                                    current_temperature = t
+                                    print(f"{Colors.GREEN}Temperature set to: {Colors.BOLD}{current_temperature}{Colors.END}")
+                                else:
+                                    print(f"{Colors.YELLOW}Temperature must be between 0 and 1{Colors.END}")
+                            except ValueError:
+                                print(f"{Colors.YELLOW}Invalid temperature value{Colors.END}")
+                        else:
+                            print(f"{Colors.YELLOW}Usage: /temperature <value>{Colors.END}")
+                        
+                    elif cmd == "/auto":
+                        current_auto = True
+                        print(f"{Colors.GREEN}Auto mode {Colors.BOLD}enabled{Colors.END}")
+                        
+                    elif cmd == "/manual":
+                        current_auto = False
+                        print(f"{Colors.GREEN}Auto mode {Colors.BOLD}disabled{Colors.END}")
+                        
+                    elif cmd == "/analyze":
+                        current_analyze = not current_analyze
+                        state = "enabled" if current_analyze else "disabled"
+                        print(f"{Colors.GREEN}Error analysis {Colors.BOLD}{state}{Colors.END}")
+                        
+                    elif cmd == "/execute":
+                        if 'command' in locals():
+                            print(f"\n{Colors.CYAN}Executing: {Colors.BOLD}{command}{Colors.END}")
+                            execute_command(command, current_analyze, current_model)
+                        else:
+                            print(f"{Colors.YELLOW}No command to execute. Generate one first.{Colors.END}")
+                        
+                    elif cmd == "/dry-run":
+                        if len(parts) > 1:
+                            dry_run_prompt = parts[1]
+                            save_to_history(dry_run_prompt)
+                            print(f"{Colors.GREEN}Generating command for: {Colors.BOLD}{dry_run_prompt}{Colors.END}")
+                            command = generate_command(dry_run_prompt, current_model, current_temperature)
+                            print(f"\n{Colors.CYAN}Generated Command: {Colors.BOLD}{command}{Colors.END}")
+                            print(f"\n{Colors.YELLOW}Dry run - command not executed{Colors.END}")
+                        else:
+                            print(f"{Colors.YELLOW}Usage: /dry-run <prompt>{Colors.END}")
+                        
+                    elif cmd == "/logs":
+                        handle_log_analysis(current_model)
+                        
+                    elif cmd == "/all-logs":
+                        log_files = find_log_files()
+                        if log_files:
+                            print(f"{Colors.GREEN}Found {len(log_files)} log files:{Colors.END}")
+                            selected_log = display_log_selection(log_files)
+                            if selected_log:
+                                handle_log_selection(selected_log, current_model)
+                        else:
+                            print(f"{Colors.YELLOW}No accessible log files found on the system.{Colors.END}")
+                        
+                    elif cmd == "/analyze-file":
+                        if len(parts) > 1:
+                            file_path = parts[1]
+                            if os.path.exists(file_path) and os.path.isfile(file_path):
+                                analyze_log_file(file_path, current_model, False)
+                            else:
+                                print(f"{Colors.RED}Error: File {file_path} does not exist or is not accessible.{Colors.END}")
+                        else:
+                            print(f"{Colors.YELLOW}Usage: /analyze-file <file_path>{Colors.END}")
+                    
+                    elif cmd == "/monitor":
+                        if len(parts) > 1:
+                            file_path = parts[1]
+                            if os.path.exists(file_path) and os.path.isfile(file_path):
+                                analyze_log_file(file_path, current_model, True, True)
+                            else:
+                                print(f"{Colors.RED}Error: File {file_path} does not exist or is not accessible.{Colors.END}")
+                        else:
+                            # If no path is provided, list all log files
+                            log_files = find_log_files()
+                            if log_files:
+                                print(f"{Colors.GREEN}Select a log file to monitor with AI analysis:{Colors.END}")
+                                selected_log = display_log_selection(log_files)
+                                if selected_log:
+                                    analyze_log_file(selected_log, current_model, True, True)
+                            else:
+                                print(f"{Colors.YELLOW}No accessible log files found on the system.{Colors.END}")
+                    
+                    elif cmd == "/watch":
+                        if len(parts) > 1:
+                            file_path = parts[1]
+                            if os.path.exists(file_path) and os.path.isfile(file_path):
+                                analyze_log_file(file_path, current_model, True, False)
+                            else:
+                                print(f"{Colors.RED}Error: File {file_path} does not exist or is not accessible.{Colors.END}")
+                        else:
+                            # If no path is provided, list all log files
+                            log_files = find_log_files()
+                            if log_files:
+                                print(f"{Colors.GREEN}Select a log file to watch without AI analysis:{Colors.END}")
+                                selected_log = display_log_selection(log_files)
+                                if selected_log:
+                                    analyze_log_file(selected_log, current_model, True, False)
+                            else:
+                                print(f"{Colors.YELLOW}No accessible log files found on the system.{Colors.END}")
+                        
+                    elif cmd == "/status":
+                        display_system_status()
+                        
+                    else:
+                        print(f"{Colors.YELLOW}Unknown command: {cmd}{Colors.END}")
+                        print(f"{Colors.YELLOW}Type /help for available commands{Colors.END}")
+                        
+                    continue
+                
+                # Normal command prompt - save to history
+                save_to_history(prompt)
+                
+                # Run in auto mode if enabled, otherwise normal mode
+                if current_auto:
+                    auto_mode(prompt, current_model, max_attempts, current_temperature)
+                else:
+                    # Generate the command
+                    print(f"{Colors.GREEN}Generating command for: {Colors.BOLD}{prompt}{Colors.END}")
+                    command = generate_command(prompt, current_model, current_temperature)
+                    
+                    # Display the generated command
+                    print(f"\n{Colors.CYAN}Generated Command: {Colors.BOLD}{command}{Colors.END}")
+                    
+                    # Ask if user wants to execute
+                    response = input(f"\n{Colors.GREEN}Do you want to execute this command? (y/n): {Colors.END}").lower()
+                    if response in ["y", "yes"]:
+                        returncode, output = execute_command(command, current_analyze, current_model)
+                        
+                        # Analyze errors if requested and command failed
+                        if current_analyze and returncode != 0:
+                            print(f"\n{Colors.BLUE}Analyzing error...{Colors.END}")
+                            analysis = analyze_error(output, command, current_model)
+                            
+                            print(f"\n{Colors.YELLOW}{Colors.BOLD}AI Error Analysis:{Colors.END}")
+                            print(f"{Colors.CYAN}{analysis}{Colors.END}")
+                            
+                            print(f"\n{Colors.GREEN}Would you like to fix this error and try again? (y/n): {Colors.END}", end="")
+                            if input().lower() in ["y", "yes"]:
+                                fixed_command = fix_command(command, output, current_model)
+                                print(f"\n{Colors.CYAN}Fixed Command: {Colors.BOLD}{fixed_command}{Colors.END}")
+                                
+                                print(f"\n{Colors.GREEN}Execute this fixed command? (y/n): {Colors.END}", end="")
+                                if input().lower() in ["y", "yes"]:
+                                    execute_command(fixed_command, False, current_model)
+                    else:
+                        print(f"{Colors.YELLOW}Command execution cancelled.{Colors.END}")
+                
+            except EOFError:
+                # Handle Ctrl+D
+                print(f"\n{Colors.YELLOW}Exiting qcmd shell...{Colors.END}")
+                break
+                
+            except KeyboardInterrupt:
+                # Handle Ctrl+C
+                print(f"\n{Colors.YELLOW}Command interrupted.{Colors.END}")
+                continue
+                
+            except Exception as e:
+                print(f"\n{Colors.RED}Error: {e}{Colors.END}")
+                continue
+        
+        # Save readline history
+        try:
+            readline.write_history_file(HISTORY_FILE)
+        except Exception:
+            pass
+    except KeyboardInterrupt:
+        print(f"\n{Colors.YELLOW}Exiting qcmd shell...{Colors.END}")
+    finally:
+        # Clean up session
+        if session_id in ACTIVE_SESSIONS:
+            del ACTIVE_SESSIONS[session_id]
 
 def fix_command(command: str, error_output: str, model: str = DEFAULT_MODEL) -> str:
     """
@@ -1005,6 +1049,15 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
     if not os.path.exists(log_file):
         print(f"{Colors.RED}Error: Log file {log_file} does not exist.{Colors.END}")
         return
+    
+    # Register this monitor
+    monitor_id = os.path.abspath(log_file)
+    ACTIVE_LOG_MONITORS[monitor_id] = {
+        "file": log_file,
+        "analyze": analyze,
+        "model": model,
+        "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
         
     print(f"{Colors.GREEN}{'Analyzing' if analyze else 'Watching'} log file: {Colors.BOLD}{log_file}{Colors.END}")
     
@@ -1072,11 +1125,20 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
     except UnicodeDecodeError:
         encoding = 'latin-1'  # Fallback encoding
     
+    # Function for cleanup
+    def cleanup():
+        # Remove from active monitors
+        if monitor_id in ACTIVE_LOG_MONITORS:
+            del ACTIVE_LOG_MONITORS[monitor_id]
+            
     # Function to run in a separate thread
     def monitor_log():
         nonlocal last_position
+        nonlocal analyze  # Make analyze accessible for toggling
+        
         print(f"{Colors.GREEN}Starting continuous log {'monitoring with analysis' if analyze else 'watching'} for {Colors.BOLD}{log_file}{Colors.END}")
         print(f"{Colors.YELLOW}Press Ctrl+C to stop {'monitoring' if analyze else 'watching'}.{Colors.END}")
+        print(f"{Colors.YELLOW}Press 'a' to toggle AI analysis (currently {'ON' if analyze else 'OFF'}).{Colors.END}")
         
         try:
             while True:
@@ -1095,6 +1157,10 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
                             print(f"{Colors.YELLOW}" + "-" * 40 + f"{Colors.END}")
                             print(new_content)
                             print(f"{Colors.YELLOW}" + "-" * 40 + f"{Colors.END}")
+                            
+                            # Show analysis status
+                            status = f"{Colors.GREEN}AI Analysis: {'ON' if analyze else 'OFF'} (Press 'a' to toggle){Colors.END}"
+                            print(status)
                             
                             # Analyze the new content only if analyze flag is True
                             if analyze:
@@ -1119,20 +1185,46 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
                 
         except KeyboardInterrupt:
             print(f"\n{Colors.YELLOW}Stopped {'monitoring' if analyze else 'watching'}.{Colors.END}")
+            cleanup()
         except Exception as e:
             print(f"\n{Colors.RED}Error {'monitoring' if analyze else 'watching'}: {e}{Colors.END}")
+            cleanup()
     
     # Start monitoring in a separate thread
     monitor_thread = threading.Thread(target=monitor_log)
     monitor_thread.daemon = True  # This will make the thread exit when the main program exits
     monitor_thread.start()
     
-    # Keep the main thread alive
+    # Keep the main thread alive and handle key presses
     try:
+        # Set up keystroke detection
+        import select
+        import sys
+        import termios
+        import tty
+        
+        # Save terminal settings
+        old_settings = termios.tcgetattr(sys.stdin)
+        tty.setcbreak(sys.stdin.fileno())
+        
         while monitor_thread.is_alive():
-            monitor_thread.join(1)
+            # Check for keypress without blocking
+            if select.select([sys.stdin], [], [], 0.5)[0]:
+                key = sys.stdin.read(1)
+                if key == 'a':  # Toggle analysis
+                    analyze = not analyze
+                    print(f"\n{Colors.GREEN}AI Analysis {'enabled' if analyze else 'disabled'}.{Colors.END}")
+                elif key == 'q':  # Quit monitoring
+                    print(f"\n{Colors.YELLOW}Stopping {'monitoring' if analyze else 'watching'}...{Colors.END}")
+                    break
+            
+            monitor_thread.join(0.1)
     except KeyboardInterrupt:
         print(f"\n{Colors.YELLOW}Stopped {'monitoring' if analyze else 'watching'}.{Colors.END}")
+    finally:
+        # Restore terminal settings
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+        cleanup()  # Clean up in case of any other exception
 
 def analyze_log_content(log_content: str, log_file: str, model: str = DEFAULT_MODEL) -> None:
     """
@@ -1978,6 +2070,12 @@ def parse_args():
         help="Watch a log file in real-time without AI analysis (similar to 'tail -f')"
     )
     
+    parser.add_argument(
+        "--status", "-S",
+        action="store_true",
+        help="Show system and qcmd status information"
+    )
+    
     # Parse the arguments
     args = parser.parse_args()
     
@@ -1986,6 +2084,11 @@ def parse_args():
         print(f"{Colors.BLUE}Current version: {Colors.BOLD}{__version__}{Colors.END}")
         print(f"{Colors.GREEN}Checking for updates...{Colors.END}")
         check_for_updates(force_display=True)
+        return
+        
+    # If showing status
+    if args.status:
+        display_system_status()
         return
         
     # If listing models
@@ -2094,6 +2197,120 @@ def is_dangerous_command(command: str) -> bool:
         if pattern.lower() in command_lower:
             return True
     return False
+
+def get_system_status() -> Dict[str, Any]:
+    """
+    Get information about system status and qcmd active processes.
+    
+    Returns:
+        Dict with status information
+    """
+    status = {}
+    
+    # Get system info
+    status["system"] = {
+        "os": os.name,
+        "python_version": sys.version.split()[0],
+        "qcmd_version": __version__,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    
+    # Check if Ollama service is running
+    try:
+        response = requests.get(f"{OLLAMA_API}/tags", timeout=2)
+        status["ollama"] = {
+            "status": "running" if response.status_code == 200 else "error",
+            "api_url": OLLAMA_API,
+        }
+        # Get available models
+        if response.status_code == 200:
+            try:
+                models = response.json().get("models", [])
+                status["ollama"]["models"] = [model["name"] for model in models]
+            except:
+                status["ollama"]["models"] = []
+    except:
+        status["ollama"] = {
+            "status": "not running",
+            "api_url": OLLAMA_API,
+        }
+    
+    # Get active log monitors
+    status["active_monitors"] = list(ACTIVE_LOG_MONITORS.keys())
+    
+    # Get active sessions
+    status["active_sessions"] = list(ACTIVE_SESSIONS.keys())
+    
+    # Check disk space where logs are stored
+    log_dir = "/var/log"
+    if os.path.exists(log_dir):
+        try:
+            total, used, free = shutil.disk_usage(log_dir)
+            status["disk"] = {
+                "total_gb": round(total / (1024**3), 2),
+                "used_gb": round(used / (1024**3), 2),
+                "free_gb": round(free / (1024**3), 2),
+                "percent_used": round((used / total) * 100, 2),
+            }
+        except:
+            pass
+    
+    return status
+
+def display_system_status() -> None:
+    """
+    Display system status information in a formatted way.
+    """
+    status = get_system_status()
+    
+    print(f"\n{Colors.CYAN}{Colors.BOLD}QCMD System Status:{Colors.END}")
+    print(f"{Colors.YELLOW}=" * 50 + f"{Colors.END}")
+    
+    # System information
+    print(f"{Colors.BOLD}System Information:{Colors.END}")
+    print(f"  OS: {status['system']['os']}")
+    print(f"  Python Version: {status['system']['python_version']}")
+    print(f"  QCMD Version: {status['system']['qcmd_version']}")
+    print(f"  Current Time: {status['system']['time']}")
+    
+    # Ollama status
+    print(f"\n{Colors.BOLD}Ollama Status:{Colors.END}")
+    if status["ollama"]["status"] == "running":
+        print(f"  Status: {Colors.GREEN}Running{Colors.END}")
+        print(f"  API URL: {status['ollama']['api_url']}")
+        if "models" in status["ollama"]:
+            print(f"  Available Models: {', '.join(status['ollama'].get('models', []))}")
+    else:
+        print(f"  Status: {Colors.RED}Not Running{Colors.END}")
+        print(f"  API URL: {status['ollama']['api_url']}")
+        print(f"  {Colors.YELLOW}Warning: Ollama service is not available. AI features will not work.{Colors.END}")
+    
+    # Active monitors
+    print(f"\n{Colors.BOLD}Active Log Monitors:{Colors.END}")
+    if status["active_monitors"]:
+        for file_path in status["active_monitors"]:
+            monitor_info = ACTIVE_LOG_MONITORS[file_path]
+            print(f"  • {file_path} ({Colors.GREEN if monitor_info.get('analyze', False) else Colors.YELLOW}{'Analysis ON' if monitor_info.get('analyze', False) else 'Watching Only'}{Colors.END})")
+    else:
+        print(f"  {Colors.YELLOW}No active log monitors.{Colors.END}")
+    
+    # Active sessions
+    print(f"\n{Colors.BOLD}Active Sessions:{Colors.END}")
+    if status["active_sessions"]:
+        for session_id in status["active_sessions"]:
+            session_info = ACTIVE_SESSIONS[session_id]
+            print(f"  • Session {session_id}: {session_info.get('type', 'Unknown')} ({session_info.get('start_time', 'Unknown')})")
+    else:
+        print(f"  {Colors.YELLOW}No active sessions.{Colors.END}")
+    
+    # Disk space
+    if "disk" in status:
+        print(f"\n{Colors.BOLD}Disk Space (Log Directory):{Colors.END}")
+        print(f"  Total: {status['disk']['total_gb']} GB")
+        print(f"  Used: {status['disk']['used_gb']} GB ({status['disk']['percent_used']}%)")
+        print(f"  Free: {status['disk']['free_gb']} GB")
+    
+    print(f"{Colors.YELLOW}=" * 50 + f"{Colors.END}\n")
 
 if __name__ == "__main__":
     main() 
