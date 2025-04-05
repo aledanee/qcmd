@@ -2,7 +2,7 @@
 
 A simple command-line tool that generates shell commands using local AI models via Ollama.
 
-**Version 1.0.8**
+**Version 1.0.9**
 
 ## Overview
 
@@ -52,6 +52,14 @@ qcmd -A "find Python files modified today"
 # Interactive shell
 qcmd -s
 ```
+
+## What's New in 1.0.9
+
+- **Fixed Cross-Process Tracking**: Log monitors now appear in status even when started from different processes
+- **Persistent Monitor Storage**: Monitor status is now tracked across different terminal sessions
+- **Improved Status Display**: Added PID tracking to show which process owns each monitor
+- **Automatic Cleanup**: Stale monitor processes get automatically removed from status
+- **Enhanced Reliability**: Better error handling and cleanup for monitor processes
 
 ## What's New in 1.0.8
 
@@ -112,6 +120,12 @@ qcmd -s
 - Updated documentation with improved installation instructions
 - Fixed package structure for better compatibility
 - Added PyPI integration for easier installation
+
+## Release Notes
+
+### 1.0.10
+* Fixed command-line argument handling to properly support utility commands like `--monitor`, `--watch`, and `--status` without requiring a prompt.
+* Improved monitor persistence tracking to show correct status across processes.
 
 ## Full Documentation
 

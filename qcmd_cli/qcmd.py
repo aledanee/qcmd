@@ -45,15 +45,16 @@ except ImportError:
 OLLAMA_API = "http://127.0.0.1:11434/api"
 DEFAULT_MODEL = "qwen2.5-coder:0.5b"
 
-# History file
-HISTORY_FILE = os.path.expanduser("~/.qcmd_history")
+# Global variables
+CONFIG_DIR = os.path.expanduser("~/.qcmd")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "config.ini")
+HISTORY_FILE = os.path.join(CONFIG_DIR, "history.txt")
 MAX_HISTORY = 1000  # Maximum number of history entries to keep
-
-# Configuration file
-CONFIG_FILE = os.path.expanduser("~/.qcmd_config")
 REQUEST_TIMEOUT = 30  # Timeout for API requests in seconds
-LOG_CACHE_FILE = os.path.expanduser("~/.qcmd_log_cache")
+LOG_CACHE_FILE = os.path.join(CONFIG_DIR, "log_cache.json")
 LOG_CACHE_EXPIRY = 3600  # Cache expires after 1 hour (in seconds)
+MONITORS_FILE = os.path.join(CONFIG_DIR, "monitors.json")
+SESSIONS_FILE = os.path.join(CONFIG_DIR, "sessions.json")
 
 # Additional dangerous patterns for improved detection
 DANGEROUS_PATTERNS = [
@@ -89,6 +90,49 @@ class Colors:
 # Global variables to track active processes
 ACTIVE_LOG_MONITORS = {}
 ACTIVE_SESSIONS = {}
+
+def save_monitors(monitors):
+    """Save active monitors to file."""
+    monitors_file = os.path.join(CONFIG_DIR, "active_monitors.json")
+    os.makedirs(os.path.dirname(monitors_file), exist_ok=True)
+    try:
+        with open(monitors_file, 'w') as f:
+            json.dump(monitors, f)
+    except Exception as e:
+        print(f"{Colors.YELLOW}Could not save active monitors: {e}{Colors.END}", file=sys.stderr)
+
+def load_monitors():
+    """Load active monitors from file."""
+    monitors_file = os.path.join(CONFIG_DIR, "active_monitors.json")
+    if os.path.exists(monitors_file):
+        try:
+            with open(monitors_file, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def cleanup_stale_monitors():
+    """Clean up monitors with non-existent processes."""
+    monitors = load_monitors()
+    updated = {}
+    
+    for monitor_id, info in monitors.items():
+        pid = info.get("pid")
+        if pid is None:
+            continue
+            
+        # Check if process is still running
+        try:
+            os.kill(int(pid), 0)  # Signal 0 doesn't kill the process, just checks if it exists
+            # Process exists, keep the monitor
+            updated[monitor_id] = info
+        except (OSError, ValueError):
+            # Process doesn't exist or invalid PID, discard the monitor
+            pass
+    
+    save_monitors(updated)
+    return updated
 
 def save_to_history(prompt: str) -> None:
     """
@@ -611,11 +655,18 @@ def start_interactive_shell(auto_mode_enabled: bool = False, current_model: str 
     """
     # Register this session
     session_id = f"shell_{int(time.time())}"
-    ACTIVE_SESSIONS[session_id] = {
+    session_info = {
         "type": "interactive_shell",
         "model": current_model,
-        "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "pid": os.getpid()
     }
+    
+    # Store in memory
+    ACTIVE_SESSIONS[session_id] = session_info
+    
+    # Persist to disk
+    save_session(session_id, session_info)
     
     try:
         # Ensure we can save history
@@ -887,10 +938,17 @@ def start_interactive_shell(auto_mode_enabled: bool = False, current_model: str 
             pass
     except KeyboardInterrupt:
         print(f"\n{Colors.YELLOW}Exiting qcmd shell...{Colors.END}")
+    except Exception as e:
+        print(f"\n{Colors.RED}Error: {e}{Colors.END}")
     finally:
-        # Clean up session
-        if session_id in ACTIVE_SESSIONS:
-            del ACTIVE_SESSIONS[session_id]
+        # Clean up session on exit
+        end_session(session_id)
+        
+        # Save history if possible
+        try:
+            readline.write_history_file(HISTORY_FILE)
+        except Exception:
+            pass
 
 def fix_command(command: str, error_output: str, model: str = DEFAULT_MODEL) -> str:
     """
@@ -1052,14 +1110,34 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
     
     # Register this monitor
     monitor_id = os.path.abspath(log_file)
+    
+    # Update in-memory copy
     ACTIVE_LOG_MONITORS[monitor_id] = {
         "file": log_file,
         "analyze": analyze,
         "model": model,
-        "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "pid": os.getpid()
     }
+    
+    # Update persistent copy
+    monitors = load_monitors()
+    monitors[monitor_id] = ACTIVE_LOG_MONITORS[monitor_id]
+    save_monitors(monitors)
         
     print(f"{Colors.GREEN}{'Analyzing' if analyze else 'Watching'} log file: {Colors.BOLD}{log_file}{Colors.END}")
+    
+    # Function for cleanup
+    def cleanup():
+        # Remove from active monitors
+        if monitor_id in ACTIVE_LOG_MONITORS:
+            del ACTIVE_LOG_MONITORS[monitor_id]
+            
+        # Also remove from persistent storage
+        monitors = load_monitors()
+        if monitor_id in monitors:
+            del monitors[monitor_id]
+            save_monitors(monitors)
     
     # Get file size for pagination
     file_size = os.path.getsize(log_file)
@@ -1088,6 +1166,9 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
                     print(f"{Colors.YELLOW}Analyzing only the last 1 MB of the log file.{Colors.END}")
                 except Exception as e:
                     print(f"{Colors.RED}Error reading log file: {e}{Colors.END}")
+                    
+                    # Clean up before exiting
+                    cleanup()
                     return
         else:
             # Read with pagination for very large files
@@ -1104,14 +1185,23 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
                     log_content = f.read().strip()
             except Exception as e:
                 print(f"{Colors.RED}Error reading log file: {e}{Colors.END}")
+                
+                # Clean up before exiting
+                cleanup()
                 return
         except Exception as e:
             print(f"{Colors.RED}Error reading log file: {e}{Colors.END}")
+            
+            # Clean up before exiting
+            cleanup()
             return
     
     # If not running in background, just analyze once
     if not background:
         analyze_log_content(log_content, log_file, model)
+        
+        # Clean up after single analysis
+        cleanup()
         return
         
     # Store last position to track new content
@@ -1214,6 +1304,12 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
                 if key == 'a':  # Toggle analysis
                     analyze = not analyze
                     print(f"\n{Colors.GREEN}AI Analysis {'enabled' if analyze else 'disabled'}.{Colors.END}")
+                    
+                    # Update persistent storage with new analyze state
+                    monitors = load_monitors()
+                    if monitor_id in monitors:
+                        monitors[monitor_id]["analyze"] = analyze
+                        save_monitors(monitors)
                 elif key == 'q':  # Quit monitoring
                     print(f"\n{Colors.YELLOW}Stopping {'monitoring' if analyze else 'watching'}...{Colors.END}")
                     break
@@ -1974,7 +2070,7 @@ def parse_args():
         description="Generate and execute shell commands using AI models via Ollama."
     )
     
-    # Main command arguments
+    # Main command arguments - make it optional with nargs="?"
     parser.add_argument(
         "prompt",
         nargs="?",
@@ -2079,6 +2175,8 @@ def parse_args():
     # Parse the arguments
     args = parser.parse_args()
     
+    # Process utility commands first (no prompt required)
+    
     # If explicitly checking for updates
     if args.check_updates:
         print(f"{Colors.BLUE}Current version: {Colors.BOLD}{__version__}{Colors.END}")
@@ -2102,49 +2200,6 @@ def parse_args():
         start_interactive_shell(args.auto, args.model, 0.7, 3)
         return
         
-    # Ensure a prompt is provided
-    if not args.prompt:
-        parser.print_help()
-        print("\nExamples:")
-        print("  qcmd \"list all files in the current directory\"")
-        print("  qcmd --execute \"find large log files\"")
-        print("  qcmd --auto \"restart the nginx service\"")
-        return
-    
-    # Generate the command
-    print(f"Generating command for: {args.prompt}")
-    command = generate_command(args.prompt, args.model)
-    
-    # Display the generated command
-    print(f"\nGenerated Command: {command}")
-    
-    # Handle execution based on flags
-    if args.dry_run:
-        # Just show the command without executing
-        print("\nDry run - command not executed")
-    elif args.yes:
-        # Quick confirmation before execution
-        print(f"\nAbout to execute: {command}")
-        response = input("Press Enter to continue or Ctrl+C to cancel...")
-        execute_command(command, args.analyze, args.model)
-    elif args.execute:
-        # Execute with confirmation
-        response = input("\nDo you want to execute this command? (y/n): ").lower()
-        if response in ["y", "yes"]:
-            execute_command(command, args.analyze, args.model)
-        else:
-            print("Command execution cancelled.")
-    elif args.auto:
-        # Auto mode: generate, execute, and fix
-        auto_mode(args.prompt, args.model)
-    else:
-        # Just ask if user wants to execute
-        response = input("\nDo you want to execute this command? (y/n): ").lower()
-        if response in ["y", "yes"]:
-            execute_command(command, args.analyze, args.model)
-        else:
-            print("Command execution cancelled.")
-    
     # Handle log analysis
     if args.logs:
         handle_log_analysis(args.model)
@@ -2181,6 +2236,46 @@ def parse_args():
         else:
             print(f"{Colors.RED}Error: File {args.watch} does not exist or is not accessible.{Colors.END}")
         return
+    
+    # Ensure a prompt is provided for command generation
+    if not args.prompt:
+        parser.print_help()
+        print_examples()
+        return
+    
+    # Generate the command
+    print(f"Generating command for: {args.prompt}")
+    command = generate_command(args.prompt, args.model)
+    
+    # Display the generated command
+    print(f"\nGenerated Command: {command}")
+    
+    # Handle execution based on flags
+    if args.dry_run:
+        # Just show the command without executing
+        print("\nDry run - command not executed")
+    elif args.yes:
+        # Quick confirmation before execution
+        print(f"\nAbout to execute: {command}")
+        response = input("Press Enter to continue or Ctrl+C to cancel...")
+        execute_command(command, args.analyze, args.model)
+    elif args.execute:
+        # Execute with confirmation
+        response = input("\nDo you want to execute this command? (y/n): ").lower()
+        if response in ["y", "yes"]:
+            execute_command(command, args.analyze, args.model)
+        else:
+            print("Command execution cancelled.")
+    elif args.auto:
+        # Auto mode: generate, execute, and fix
+        auto_mode(args.prompt, args.model)
+    else:
+        # Just ask if user wants to execute
+        response = input("\nDo you want to execute this command? (y/n): ").lower()
+        if response in ["y", "yes"]:
+            execute_command(command, args.analyze, args.model)
+        else:
+            print("Command execution cancelled.")
 
 def is_dangerous_command(command: str) -> bool:
     """
@@ -2235,11 +2330,18 @@ def get_system_status() -> Dict[str, Any]:
             "api_url": OLLAMA_API,
         }
     
-    # Get active log monitors
-    status["active_monitors"] = list(ACTIVE_LOG_MONITORS.keys())
+    # Clean up stale monitors first
+    active_monitors = cleanup_stale_monitors()
     
-    # Get active sessions
-    status["active_sessions"] = list(ACTIVE_SESSIONS.keys())
+    # Get active log monitors from persistent storage
+    status["active_monitors"] = list(active_monitors.keys())
+    
+    # Clean up stale sessions
+    active_sessions = cleanup_stale_sessions()
+    
+    # Get active sessions from persistent storage
+    status["active_sessions"] = list(active_sessions.keys())
+    status["sessions_info"] = active_sessions
     
     # Check disk space where logs are stored
     log_dir = "/var/log"
@@ -2262,6 +2364,8 @@ def display_system_status() -> None:
     Display system status information in a formatted way.
     """
     status = get_system_status()
+    # Load full monitor details from persistent storage
+    active_monitors = load_monitors()
     
     print(f"\n{Colors.CYAN}{Colors.BOLD}QCMD System Status:{Colors.END}")
     print(f"{Colors.YELLOW}=" * 50 + f"{Colors.END}")
@@ -2289,8 +2393,8 @@ def display_system_status() -> None:
     print(f"\n{Colors.BOLD}Active Log Monitors:{Colors.END}")
     if status["active_monitors"]:
         for file_path in status["active_monitors"]:
-            monitor_info = ACTIVE_LOG_MONITORS[file_path]
-            print(f"  • {file_path} ({Colors.GREEN if monitor_info.get('analyze', False) else Colors.YELLOW}{'Analysis ON' if monitor_info.get('analyze', False) else 'Watching Only'}{Colors.END})")
+            monitor_info = active_monitors[file_path]
+            print(f"  • {file_path} ({Colors.GREEN if monitor_info.get('analyze', False) else Colors.YELLOW}{'Analysis ON' if monitor_info.get('analyze', False) else 'Watching Only'}{Colors.END}, PID: {monitor_info.get('pid', 'Unknown')})")
     else:
         print(f"  {Colors.YELLOW}No active log monitors.{Colors.END}")
     
@@ -2298,8 +2402,11 @@ def display_system_status() -> None:
     print(f"\n{Colors.BOLD}Active Sessions:{Colors.END}")
     if status["active_sessions"]:
         for session_id in status["active_sessions"]:
-            session_info = ACTIVE_SESSIONS[session_id]
-            print(f"  • Session {session_id}: {session_info.get('type', 'Unknown')} ({session_info.get('start_time', 'Unknown')})")
+            session_info = status["sessions_info"].get(session_id, {})
+            session_type = session_info.get('type', 'Unknown')
+            start_time = session_info.get('start_time', 'Unknown')
+            pid = session_info.get('pid', 'Unknown')
+            print(f"  • Session {session_id}: {session_type} (Started: {start_time}, PID: {pid})")
     else:
         print(f"  {Colors.YELLOW}No active sessions.{Colors.END}")
     
@@ -2311,6 +2418,133 @@ def display_system_status() -> None:
         print(f"  Free: {status['disk']['free_gb']} GB")
     
     print(f"{Colors.YELLOW}=" * 50 + f"{Colors.END}\n")
+
+def save_session(session_id, session_info):
+    """
+    Save session information to persistent storage.
+    """
+    try:
+        # Create config directory if it doesn't exist
+        if not os.path.exists(CONFIG_DIR):
+            os.makedirs(CONFIG_DIR, exist_ok=True)
+        
+        # Load existing sessions
+        sessions = {}
+        if os.path.exists(SESSIONS_FILE):
+            with open(SESSIONS_FILE, 'r') as f:
+                try:
+                    sessions = json.load(f)
+                except json.JSONDecodeError:
+                    pass
+        
+        # Update with new session
+        sessions[session_id] = session_info
+        
+        # Write back to file
+        with open(SESSIONS_FILE, 'w') as f:
+            json.dump(sessions, f, indent=2)
+        
+        return True
+    except Exception as e:
+        print(f"Error saving session: {e}", file=sys.stderr)
+        return False
+
+def load_sessions():
+    """
+    Load sessions from persistent storage.
+    """
+    sessions = {}
+    try:
+        if os.path.exists(SESSIONS_FILE):
+            with open(SESSIONS_FILE, 'r') as f:
+                try:
+                    sessions = json.load(f)
+                except json.JSONDecodeError:
+                    pass
+    except Exception as e:
+        print(f"Error loading sessions: {e}", file=sys.stderr)
+    
+    return sessions
+
+def cleanup_stale_sessions():
+    """
+    Remove sessions for processes that are no longer running.
+    """
+    sessions = load_sessions()
+    active_sessions = {}
+    
+    for session_id, session_info in sessions.items():
+        pid = session_info.get('pid')
+        if pid and is_process_running(pid):
+            active_sessions[session_id] = session_info
+    
+    # Write cleaned sessions back to file
+    try:
+        with open(SESSIONS_FILE, 'w') as f:
+            json.dump(active_sessions, f, indent=2)
+    except Exception as e:
+        print(f"Error saving cleaned sessions: {e}", file=sys.stderr)
+    
+    return active_sessions
+
+def end_session(session_id):
+    """
+    Remove a specific session.
+    """
+    try:
+        sessions = load_sessions()
+        if session_id in sessions:
+            del sessions[session_id]
+            
+            with open(SESSIONS_FILE, 'w') as f:
+                json.dump(sessions, f, indent=2)
+        
+        # Also remove from in-memory cache
+        if session_id in ACTIVE_SESSIONS:
+            del ACTIVE_SESSIONS[session_id]
+            
+        return True
+    except Exception as e:
+        print(f"Error ending session: {e}", file=sys.stderr)
+        return False
+
+def is_process_running(pid):
+    """
+    Check if a process with the given PID is running.
+    
+    Args:
+        pid: Process ID to check
+        
+    Returns:
+        True if process is running, False otherwise
+    """
+    try:
+        pid = int(pid)  # Ensure pid is an integer
+        # For Unix/Linux/MacOS
+        if os.name == 'posix':
+            # A simple check using kill with signal 0
+            # which doesn't actually send a signal
+            try:
+                os.kill(pid, 0)
+                return True
+            except OSError:
+                return False
+        # For Windows
+        elif os.name == 'nt':
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            SYNCHRONIZE = 0x00100000
+            process = kernel32.OpenProcess(SYNCHRONIZE, 0, pid)
+            if process != 0:
+                kernel32.CloseHandle(process)
+                return True
+            else:
+                return False
+        else:
+            # Unknown OS
+            return False
+    except (ValueError, TypeError):
+        return False
 
 if __name__ == "__main__":
     main() 

@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 # This uses the PyPI-optimized README for better display on PyPI
 name = "ibrahimiq-qcmd"
-version = "1.0.8"
+version = "1.0.10"
 authors = [
   {name = "Ibrahim", email = "ibrahimihssan1@gmail.com"},
 ]
-description = "AI-powered Command Generator using Local LLMs"
+description = "Generate and execute shell commands using AI models via Ollama"
 readme = "PYPI-README.md"
 license = "MIT"
 requires-python = ">=3.6"

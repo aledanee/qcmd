@@ -1,5 +1,5 @@
 """
-qcmd - AI-powered Command Generator using Local LLMs
+QCMD - AI Shell Command Generator
 """
 
-__version__ = "1.0.8" 
+__version__ = '1.0.10' 
