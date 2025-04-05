@@ -4,6 +4,11 @@ on:
   release:
     types: [created]
 
+# Add permissions for trusted publishing
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
