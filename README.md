@@ -14,8 +14,18 @@ QCMD is a powerful command-line tool that generates shell commands from natural 
 
 ## Installation
 
+### From PyPI
+
 ```bash
 pip install ibrahimiq-qcmd
+```
+
+### From Source (Development Mode)
+
+```bash
+git clone https://github.com/aledanee/qcmd.git
+cd qcmd
+pip install -e .
 ```
 
 Make sure you have [Ollama](https://ollama.ai/) installed and running with the Qwen2.5-Coder model:
@@ -26,6 +36,30 @@ ollama serve
 ```
 
 ## Usage
+
+### Running QCMD
+
+There are several ways to run QCMD:
+
+1. Using the installed command:
+```bash
+qcmd "list all files in the current directory"
+```
+
+2. Using the Python module:
+```bash
+python -m qcmd_cli "list all files in the current directory"
+```
+
+3. Using the wrapper script (if in project directory):
+```bash
+./qcmd "list all files in the current directory"
+```
+
+4. Using the run_qcmd.py script (if in project directory):
+```bash
+./run_qcmd.py "list all files in the current directory"
+```
 
 ### Basic Command Generation
 
@@ -59,7 +93,7 @@ qcmd --status
 
 ## Modular Architecture
 
-QCMD has been refactored into a modular architecture with the following components:
+QCMD has been refactored into a modular architecture for better maintainability and extensibility. The main components are:
 
 ### Core Modules
 
@@ -89,6 +123,18 @@ QCMD has been refactored into a modular architecture with the following componen
 ### Command Handling
 
 - `qcmd_cli.commands.handler`: Command-line argument parsing and execution
+
+See [MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md) for a detailed explanation of the modular design.
+
+## Development
+
+### Testing
+
+Run the tests to verify the modular architecture:
+
+```bash
+python -m pytest tests/
+```
 
 ## Configuration
 
