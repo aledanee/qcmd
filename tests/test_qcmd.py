@@ -14,7 +14,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 # Import functions to test
 try:
-    from qcmd_cli.qcmd import is_dangerous_command, save_config, load_config
+    from qcmd_cli.core.command_generator import is_dangerous_command
+    from qcmd_cli.config.settings import load_config, save_config, CONFIG_FILE
 except ImportError:
     # If running as script
     print("Could not import qcmd_cli module. Make sure it's in your PYTHONPATH.")
@@ -73,7 +74,7 @@ class TestQcmdConfig(unittest.TestCase):
             "analyze_errors": False
         }
         
-        with patch('qcmd_cli.qcmd.CONFIG_FILE', self.config_path):
+        with patch('qcmd_cli.config.settings.CONFIG_FILE', self.config_path):
             save_config(test_config)
             loaded_config = load_config()
             

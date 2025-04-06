@@ -20,7 +20,7 @@ def test_module_imports():
         print(f"✓ Main package: qcmd_cli (version {qcmd_cli.__version__})")
     except ImportError as e:
         print(f"❌ Failed to import qcmd_cli: {e}")
-        return False
+        assert False, f"Failed to import qcmd_cli: {e}"
     
     # Test core modules
     try:
@@ -28,7 +28,7 @@ def test_module_imports():
         print("✓ Core modules")
     except ImportError as e:
         print(f"❌ Failed to import core modules: {e}")
-        return False
+        assert False, f"Failed to import core modules: {e}"
     
     # Test utility modules
     try:
@@ -36,7 +36,7 @@ def test_module_imports():
         print("✓ Utility modules")
     except ImportError as e:
         print(f"❌ Failed to import utility modules: {e}")
-        return False
+        assert False, f"Failed to import utility modules: {e}"
     
     # Test log analysis modules
     try:
@@ -44,7 +44,7 @@ def test_module_imports():
         print("✓ Log analysis modules")
     except ImportError as e:
         print(f"❌ Failed to import log analysis modules: {e}")
-        return False
+        assert False, f"Failed to import log analysis modules: {e}"
     
     # Test UI modules
     try:
@@ -52,7 +52,7 @@ def test_module_imports():
         print("✓ UI modules")
     except ImportError as e:
         print(f"❌ Failed to import UI modules: {e}")
-        return False
+        assert False, f"Failed to import UI modules: {e}"
     
     # Test config modules
     try:
@@ -60,7 +60,7 @@ def test_module_imports():
         print("✓ Configuration modules")
     except ImportError as e:
         print(f"❌ Failed to import configuration modules: {e}")
-        return False
+        assert False, f"Failed to import configuration modules: {e}"
     
     # Test command modules
     try:
@@ -68,7 +68,7 @@ def test_module_imports():
         print("✓ Command modules")
     except ImportError as e:
         print(f"❌ Failed to import command modules: {e}")
-        return False
+        assert False, f"Failed to import command modules: {e}"
     
     # Import main entry point
     try:
@@ -76,10 +76,10 @@ def test_module_imports():
         print("✓ Main entry point")
     except ImportError as e:
         print(f"❌ Failed to import main entry point: {e}")
-        return False
+        assert False, f"Failed to import main entry point: {e}"
     
     print("\nAll imports successful! The modular structure is working correctly.")
-    return True
+    assert True  # Use assert instead of return
 
 if __name__ == "__main__":
     success = test_module_imports()
