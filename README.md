@@ -128,6 +128,24 @@ See [MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md) for a detailed explanatio
 
 ## Development
 
+### Setting Up Development Environment
+
+1. Clone the repository:
+```bash
+git clone https://github.com/aledanee/qcmd.git
+cd qcmd
+```
+
+2. Install in development mode:
+```bash
+pip install -e .
+```
+
+3. Install development dependencies:
+```bash
+pip install pytest
+```
+
 ### Testing
 
 Run the tests to verify the modular architecture:
@@ -135,6 +153,33 @@ Run the tests to verify the modular architecture:
 ```bash
 python -m pytest tests/
 ```
+
+### Directory Structure
+
+```
+qcmd/
+├── qcmd_cli/                 # Main package
+│   ├── commands/             # Command handlers
+│   ├── config/               # Configuration management
+│   ├── core/                 # Core functionality
+│   ├── log_analysis/         # Log analysis modules
+│   ├── ui/                   # User interface
+│   └── utils/                # Utility modules
+├── tests/                    # Test suite
+└── run_qcmd.py               # Entry point script
+```
+
+## Contributing
+
+Contributions are welcome! Here's how you can contribute:
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature-name`
+3. Make your changes and commit them: `git commit -m 'Add some feature'`
+4. Push to the branch: `git push origin feature-name`
+5. Submit a pull request
+
+Please make sure to update tests as appropriate and ensure all tests pass before submitting a pull request.
 
 ## Configuration
 
