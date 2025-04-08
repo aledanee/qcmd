@@ -1,0 +1,3 @@
+M	qcmd_cli/core/command_generator.py
+M	qcmd_cli/log_analysis/analyzer.py
+M	tests/core/test_command_generator.py

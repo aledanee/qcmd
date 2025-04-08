@@ -1,0 +1,732 @@
+test_analyze_error_fallback_failure (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test analyze_error when both primary and fallback attempts fail. ... [91mError analyzing error: Primary error[0m
+ok
+test_api_response_handling (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test handling of different API response errors. ... 2025-04-07 14:10:38,705 - qcmd_cli.core.command_generator - ERROR - API rate limit exceeded
+2025-04-07 14:10:38,705 - qcmd_cli.core.command_generator - ERROR - API authentication failed
+2025-04-07 14:10:38,705 - qcmd_cli.core.command_generator - ERROR - API returned error status: 500
+2025-04-07 14:10:38,705 - qcmd_cli.core.command_generator - ERROR - Invalid JSON response from API
+ok
+test_command_output_validation (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test validation of command output. ... 2025-04-07 14:10:38,705 - qcmd_cli.core.command_generator - WARNING - Command output contains error pattern: command not found
+2025-04-07 14:10:38,705 - qcmd_cli.core.command_generator - WARNING - Command output contains error pattern: permission denied
+2025-04-07 14:10:38,705 - qcmd_cli.core.command_generator - WARNING - Command output contains error pattern: no such file or directory
+2025-04-07 14:10:38,705 - qcmd_cli.core.command_generator - WARNING - Command output contains error pattern: invalid option
+2025-04-07 14:10:38,705 - qcmd_cli.core.command_generator - WARNING - Command output contains error pattern: syntax error
+ok
+test_execute_command_dangerous (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command with dangerous commands. ... 2025-04-07 14:10:38,706 - qcmd_cli.core.command_generator - WARNING - Potentially dangerous command detected
+[94mAnalyzing error with [1mqwen2.5-coder:0.5b[0m[94m...[0m
+This command appears to be dangerous. Do you want to proceed? [y/N]: ERROR
+test_execute_command_exception (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command with subprocess exception. ... 2025-04-07 14:10:42,069 - qcmd_cli.core.command_generator - WARNING - Retry 1/3 after 1.5s: Execution error
+2025-04-07 14:10:43,572 - qcmd_cli.core.command_generator - WARNING - Retry 2/3 after 3.0s: Execution error
+ERROR
+test_execute_command_output_validation (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command with output validation. ... ERROR
+test_execute_command_process_exception (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command when process creation fails. ... 2025-04-07 14:10:46,590 - qcmd_cli.core.command_generator - WARNING - Retry 1/3 after 1.5s: Process creation failed
+2025-04-07 14:10:48,094 - qcmd_cli.core.command_generator - WARNING - Retry 2/3 after 3.0s: Process creation failed
+ERROR
+test_execute_command_process_timeout (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command with a process that times out. ... 2025-04-07 14:10:51,110 - qcmd_cli.core.command_generator - WARNING - Retry 1/3 after 1.5s: Command timed out after 30 seconds
+2025-04-07 14:10:52,616 - qcmd_cli.core.command_generator - WARNING - Retry 2/3 after 3.0s: analyze_error() missing 1 required positional argument: 'command'
+ERROR
+test_execute_command_retry_strategy (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command retry strategy. ... ERROR
+test_execute_command_timeout_cleanup (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command cleanup after timeout. ... 2025-04-07 14:10:55,633 - qcmd_cli.core.command_generator - WARNING - Retry 1/3 after 1.5s: Command timed out after 30 seconds
+2025-04-07 14:10:57,143 - qcmd_cli.core.command_generator - WARNING - Retry 2/3 after 3.0s: analyze_error() missing 1 required positional argument: 'command'
+ERROR
+test_execute_command_timeout_handling (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command handling process timeout. ... 2025-04-07 14:11:00,156 - qcmd_cli.core.command_generator - WARNING - Retry 1/3 after 1.5s: Command timed out after 30 seconds
+2025-04-07 14:11:01,659 - qcmd_cli.core.command_generator - WARNING - Retry 2/3 after 3.0s: Command timed out after 30 seconds
+ERROR
+test_execute_command_timeout_with_both_outputs (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command handling timeout with both stdout and stderr output. ... 2025-04-07 14:11:04,677 - qcmd_cli.core.command_generator - WARNING - Retry 1/3 after 1.5s: Command timed out after 30 seconds
+2025-04-07 14:11:06,187 - qcmd_cli.core.command_generator - WARNING - Retry 2/3 after 3.0s: analyze_error() missing 1 required positional argument: 'command'
+ERROR
+test_execute_command_timeout_with_output (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command handling timeout with output. ... 2025-04-07 14:11:09,210 - qcmd_cli.core.command_generator - WARNING - Retry 1/3 after 1.5s: Command timed out after 30 seconds
+2025-04-07 14:11:10,744 - qcmd_cli.core.command_generator - WARNING - Retry 2/3 after 3.0s: analyze_error() missing 1 required positional argument: 'command'
+ERROR
+test_execute_command_timeout_with_stderr (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command handling timeout with stderr output. ... 2025-04-07 14:11:13,764 - qcmd_cli.core.command_generator - WARNING - Retry 1/3 after 1.5s: Command timed out after 30 seconds
+2025-04-07 14:11:15,270 - qcmd_cli.core.command_generator - WARNING - Retry 2/3 after 3.0s: analyze_error() missing 1 required positional argument: 'command'
+ERROR
+test_execute_command_validation_errors (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command with various validation errors. ... ERROR
+test_execute_command_with_recovery (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command with error recovery. ... 2025-04-07 14:11:18,285 - qcmd_cli.core.command_generator - INFO - Trying fallback command: ls -la /root
+2025-04-07 14:11:18,286 - qcmd_cli.core.command_generator - INFO - Trying fallback command: ls -la -la /root
+2025-04-07 14:11:18,286 - qcmd_cli.core.command_generator - INFO - Trying fallback command: ls -la -la -la /root
+ERROR
+test_fix_command_clean_markdown_single_line (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test fix_command with single line markdown code block. ... ok
+test_fix_command_exceptions (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test fix_command error handling. ... [91mError generating fixed command: API error[0m
+ok
+test_fix_command_inline_code (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test fix_command with inline code format. ... ok
+test_fix_command_markdown_formats (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test fix_command handles different markdown formats. ... ok
+test_fix_command_multiline_code_block (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test fix_command with multiline code block. ... ok
+test_fix_command_multiline_with_closing_backticks (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test fix_command with multiline code block and closing backticks on separate line. ... ok
+test_fix_command_multiline_with_incomplete_backticks (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test fix_command with multiline code block and incomplete backticks. ... ok
+test_fix_command_multiline_with_language (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test fix_command with multiline code block containing language specifier. ... ok
+test_generate_command_all_timeouts (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command when all attempts timeout. ... 2025-04-07 14:11:18,294 - qcmd_cli.core.command_generator - INFO - Generating command with qwen2.5-coder:0.5b...
+2025-04-07 14:11:18,294 - qcmd_cli.core.command_generator - WARNING - API error: Request timed out. Retrying in 2 seconds...
+2025-04-07 14:11:18,294 - qcmd_cli.core.command_generator - INFO - Retry attempt 2/3...
+2025-04-07 14:11:18,295 - qcmd_cli.core.command_generator - WARNING - API error: Request timed out. Retrying in 4 seconds...
+2025-04-07 14:11:18,295 - qcmd_cli.core.command_generator - INFO - Retry attempt 3/3...
+2025-04-07 14:11:18,295 - qcmd_cli.core.command_generator - ERROR - API request timed out after 30 seconds
+ERROR
+test_generate_command_api_errors (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with different API errors. ... ERROR
+test_generate_command_api_response_error (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with API response errors. ... ERROR
+test_generate_command_connection_error (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with connection errors. ... ERROR
+test_generate_command_fallback_failure (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command when both primary and fallback attempts fail. ... ERROR
+test_generate_command_fallback_failure_with_retries (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command when fallback also fails after retries. ... ERROR
+test_generate_command_fallback_success_after_timeout (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with successful fallback after timeout. ... ERROR
+test_generate_command_fallback_with_empty_response (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with fallback and empty response. ... ERROR
+test_generate_command_fallback_with_retries (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with fallback and retries. ... ERROR
+test_generate_command_general_exception (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with other exceptions. ... 2025-04-07 14:11:18,317 - qcmd_cli.core.command_generator - INFO - Generating command with qwen2.5-coder:0.5b...
+2025-04-07 14:11:18,318 - qcmd_cli.core.command_generator - WARNING - API error: Unexpected error. Retrying in 2 seconds...
+2025-04-07 14:11:18,318 - qcmd_cli.core.command_generator - INFO - Retry attempt 2/3...
+2025-04-07 14:11:18,318 - qcmd_cli.core.command_generator - WARNING - API error: Unexpected error. Retrying in 4 seconds...
+2025-04-07 14:11:18,318 - qcmd_cli.core.command_generator - INFO - Retry attempt 3/3...
+2025-04-07 14:11:18,318 - qcmd_cli.core.command_generator - ERROR - Unexpected API error: Unexpected error
+ERROR
+test_generate_command_list_models_exception (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command when list_models raises an exception. ... 2025-04-07 14:11:18,318 - qcmd_cli.core.command_generator - WARNING - Failed to get available models: List models error
+ERROR
+test_generate_command_model_unavailable (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command when requested model is not available. ... ERROR
+test_generate_command_multiline_code_block (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with a multiline code block response. ... 2025-04-07 14:11:18,321 - qcmd_cli.core.command_generator - INFO - Generating command with qwen2.5-coder:0.5b...
+2025-04-07 14:11:18,324 - qcmd_cli.core.command_generator - INFO - Generating command with qwen2.5-coder:0.5b...
+ok
+test_generate_command_request_exception (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with general request exceptions. ... ERROR
+test_generate_command_timeout (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with timeout errors and retries. ... 2025-04-07 14:11:18,327 - qcmd_cli.core.command_generator - INFO - Generating command with qwen2.5-coder:0.5b...
+2025-04-07 14:11:18,327 - qcmd_cli.core.command_generator - WARNING - API error: Request timed out. Retrying in 2 seconds...
+2025-04-07 14:11:18,327 - qcmd_cli.core.command_generator - INFO - Retry attempt 2/3...
+2025-04-07 14:11:18,327 - qcmd_cli.core.command_generator - WARNING - API error: Request timed out. Retrying in 4 seconds...
+2025-04-07 14:11:18,327 - qcmd_cli.core.command_generator - INFO - Retry attempt 3/3...
+ok
+test_generate_command_validation_errors (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with various validation errors. ... ERROR
+test_get_fallback_command (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test the fallback command generation. ... ok
+test_get_retry_strategy (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test retry strategy determination. ... ok
+test_handle_command_execution_error (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test _handle_command_execution_error with different error types. ... 2025-04-07 14:11:18,329 - qcmd_cli.core.command_generator - ERROR - Command execution timed out: test_cmd
+2025-04-07 14:11:18,329 - qcmd_cli.core.command_generator - ERROR - Command failed with return code 2: test_cmd
+2025-04-07 14:11:18,329 - qcmd_cli.core.command_generator - ERROR - Error executing command: Some error
+ok
+test_handle_command_failure (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test command failure handling with recovery. ... ok
+test_is_dangerous_command_additional_patterns (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test additional dangerous command patterns. ... ok
+test_list_models_exception (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test list_models handles exceptions. ... [93mError listing models: API error[0m
+ok
+test_list_models_exception_handling (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test list_models exception handling. ... [93mError listing models: API error[0m
+ok
+test_process_error_handling (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test handling of different process-related errors. ... 2025-04-07 14:11:18,331 - qcmd_cli.core.command_generator - ERROR - Command execution timed out: test_cmd
+2025-04-07 14:11:18,331 - qcmd_cli.core.command_generator - ERROR - Command failed with return code 2: test_cmd
+2025-04-07 14:11:18,331 - qcmd_cli.core.command_generator - ERROR - Process creation failed: Process creation failed
+2025-04-07 14:11:18,331 - qcmd_cli.core.command_generator - ERROR - Unexpected process error: Unexpected error
+ok
+test_suggest_command_correction (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test command correction suggestions. ... ok
+
+======================================================================
+ERROR: test_execute_command_dangerous (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command with dangerous commands.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 196, in test_execute_command_dangerous
+    returncode, output = execute_command(dangerous_cmd)
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 657, in execute_command
+    if not click.confirm("This command appears to be dangerous. Do you want to proceed?"):
+  File "/usr/local/lib/python3.9/dist-packages/click/termui.py", line 235, in confirm
+    raise Abort() from None
+click.exceptions.Abort
+
+======================================================================
+ERROR: test_execute_command_exception (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command with subprocess exception.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 665, in execute_command
+    process = subprocess.Popen(
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 665, in execute_command
+    process = subprocess.Popen(
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 665, in execute_command
+    process = subprocess.Popen(
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+Exception: Execution error
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 224, in test_execute_command_exception
+    returncode, output = execute_command("ls")
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 710, in execute_command
+    raise CommandExecutionError(f"Command failed after {max_retries} attempts: {last_error}")
+qcmd_cli.core.command_generator.CommandExecutionError: Command failed after 3 attempts: Execution error
+
+======================================================================
+ERROR: test_execute_command_output_validation (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command with output validation.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 893, in test_execute_command_output_validation
+    with self.assertRaises(CommandOutputError) as context:
+NameError: name 'CommandOutputError' is not defined
+
+======================================================================
+ERROR: test_execute_command_process_exception (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command when process creation fails.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 665, in execute_command
+    process = subprocess.Popen(
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 665, in execute_command
+    process = subprocess.Popen(
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 665, in execute_command
+    process = subprocess.Popen(
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+Exception: Process creation failed
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 328, in test_execute_command_process_exception
+    return_code, output = execute_command("ls")
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 710, in execute_command
+    raise CommandExecutionError(f"Command failed after {max_retries} attempts: {last_error}")
+qcmd_cli.core.command_generator.CommandExecutionError: Command failed after 3 attempts: Process creation failed
+
+======================================================================
+ERROR: test_execute_command_process_timeout (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command with a process that times out.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 674, in execute_command
+    stdout, stderr = process.communicate(timeout=timeout)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1154, in _execute_mock_call
+    result = next(effect)
+StopIteration
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 682, in test_execute_command_process_timeout
+    return_code, output = execute_command("sleep 100")
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 710, in execute_command
+    raise CommandExecutionError(f"Command failed after {max_retries} attempts: {last_error}")
+qcmd_cli.core.command_generator.CommandExecutionError: Command failed after 3 attempts: 
+
+======================================================================
+ERROR: test_execute_command_retry_strategy (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command retry strategy.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 1088, in test_execute_command_retry_strategy
+    with self.assertRaises(CommandExecutionError) as context:
+NameError: name 'CommandExecutionError' is not defined
+
+======================================================================
+ERROR: test_execute_command_timeout_cleanup (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command cleanup after timeout.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 674, in execute_command
+    stdout, stderr = process.communicate(timeout=timeout)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1154, in _execute_mock_call
+    result = next(effect)
+StopIteration
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 623, in test_execute_command_timeout_cleanup
+    return_code, output = execute_command("test_cmd")
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 710, in execute_command
+    raise CommandExecutionError(f"Command failed after {max_retries} attempts: {last_error}")
+qcmd_cli.core.command_generator.CommandExecutionError: Command failed after 3 attempts: 
+
+======================================================================
+ERROR: test_execute_command_timeout_handling (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command handling process timeout.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 674, in execute_command
+    stdout, stderr = process.communicate(timeout=timeout)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 674, in execute_command
+    stdout, stderr = process.communicate(timeout=timeout)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 674, in execute_command
+    stdout, stderr = process.communicate(timeout=timeout)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+subprocess.TimeoutExpired: Command 'test_cmd' timed out after 60 seconds
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 698, in execute_command
+    raise CommandExecutionError(f"Command timed out after {timeout} seconds")
+qcmd_cli.core.command_generator.CommandExecutionError: Command timed out after 30 seconds
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 376, in test_execute_command_timeout_handling
+    mock_popen.return_value = mock_process
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 710, in execute_command
+    raise CommandExecutionError(f"Command failed after {max_retries} attempts: {last_error}")
+qcmd_cli.core.command_generator.CommandExecutionError: Command failed after 3 attempts: Command timed out after 30 seconds
+
+======================================================================
+ERROR: test_execute_command_timeout_with_both_outputs (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command handling timeout with both stdout and stderr output.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 674, in execute_command
+    stdout, stderr = process.communicate(timeout=timeout)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1154, in _execute_mock_call
+    result = next(effect)
+StopIteration
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 587, in test_execute_command_timeout_with_both_outputs
+    mock_popen.return_value = mock_process
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 710, in execute_command
+    raise CommandExecutionError(f"Command failed after {max_retries} attempts: {last_error}")
+qcmd_cli.core.command_generator.CommandExecutionError: Command failed after 3 attempts: 
+
+======================================================================
+ERROR: test_execute_command_timeout_with_output (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command handling timeout with output.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 674, in execute_command
+    stdout, stderr = process.communicate(timeout=timeout)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1154, in _execute_mock_call
+    result = next(effect)
+StopIteration
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 552, in test_execute_command_timeout_with_output
+    mock_popen.return_value = mock_process
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 710, in execute_command
+    raise CommandExecutionError(f"Command failed after {max_retries} attempts: {last_error}")
+qcmd_cli.core.command_generator.CommandExecutionError: Command failed after 3 attempts: 
+
+======================================================================
+ERROR: test_execute_command_timeout_with_stderr (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command handling timeout with stderr output.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 674, in execute_command
+    stdout, stderr = process.communicate(timeout=timeout)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1154, in _execute_mock_call
+    result = next(effect)
+StopIteration
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 468, in test_execute_command_timeout_with_stderr
+    mock_popen.return_value = mock_process
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 710, in execute_command
+    raise CommandExecutionError(f"Command failed after {max_retries} attempts: {last_error}")
+qcmd_cli.core.command_generator.CommandExecutionError: Command failed after 3 attempts: 
+
+======================================================================
+ERROR: test_execute_command_validation_errors (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command with various validation errors.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 758, in test_execute_command_validation_errors
+    def test_execute_command_validation_errors(self, mock_popen):
+NameError: name 'CommandValidationError' is not defined
+
+======================================================================
+ERROR: test_execute_command_with_recovery (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test execute_command with error recovery.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 1055, in test_execute_command_with_recovery
+    mock_popen.return_value = process_mock
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 712, in execute_command
+    raise CommandExecutionError(f"Command failed after {max_retries} attempts: {last_error}")
+qcmd_cli.core.command_generator.CommandExecutionError: Command failed after 3 attempts: None
+
+======================================================================
+ERROR: test_generate_command_all_timeouts (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command when all attempts timeout.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 237, in generate_command
+    response = requests.post(f"{OLLAMA_API}/generate", json=payload, timeout=REQUEST_TIMEOUT)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 237, in generate_command
+    response = requests.post(f"{OLLAMA_API}/generate", json=payload, timeout=REQUEST_TIMEOUT)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 237, in generate_command
+    response = requests.post(f"{OLLAMA_API}/generate", json=payload, timeout=REQUEST_TIMEOUT)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+requests.exceptions.Timeout: Request timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 71, in test_generate_command_all_timeouts
+    mock_post.side_effect = requests.exceptions.Timeout("Request timed out")
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 251, in generate_command
+    _handle_api_error(e, attempt, max_retries, retry_delay)
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 137, in _handle_api_error
+    raise APITimeoutError(f"API request timed out after {REQUEST_TIMEOUT} seconds")
+qcmd_cli.core.command_generator.APITimeoutError: API request timed out after 30 seconds
+
+======================================================================
+ERROR: test_generate_command_api_errors (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with different API errors.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 913, in test_generate_command_api_errors
+    mock_response.status_code = 429
+NameError: name 'APIRateLimitError' is not defined
+
+======================================================================
+ERROR: test_generate_command_api_response_error (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with API response errors.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 750, in test_generate_command_api_response_error
+    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("500 Server Error")
+NameError: name 'APIResponseError' is not defined
+
+======================================================================
+ERROR: test_generate_command_connection_error (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with connection errors.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 91, in test_generate_command_connection_error
+    mock_post.side_effect = requests.exceptions.ConnectionError("Connection refused")
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 214, in generate_command
+    raise ModelUnavailableError(f"Model '{model}' is not available")
+qcmd_cli.core.command_generator.ModelUnavailableError: Model 'qwen2.5-coder:0.5b' is not available
+
+======================================================================
+ERROR: test_generate_command_fallback_failure (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command when both primary and fallback attempts fail.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 361, in test_generate_command_fallback_failure
+    mock_post.side_effect = requests.exceptions.Timeout("Request timed out")
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 214, in generate_command
+    raise ModelUnavailableError(f"Model '{model}' is not available")
+qcmd_cli.core.command_generator.ModelUnavailableError: Model 'custom-model' is not available
+
+======================================================================
+ERROR: test_generate_command_fallback_failure_with_retries (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command when fallback also fails after retries.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 450, in test_generate_command_fallback_failure_with_retries
+    mock_post.side_effect = [error_response] * 4  # All attempts fail
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 214, in generate_command
+    raise ModelUnavailableError(f"Model '{model}' is not available")
+qcmd_cli.core.command_generator.ModelUnavailableError: Model 'custom-model' is not available
+
+======================================================================
+ERROR: test_generate_command_fallback_success_after_timeout (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with successful fallback after timeout.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 530, in test_generate_command_fallback_success_after_timeout
+    ]
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 214, in generate_command
+    raise ModelUnavailableError(f"Model '{model}' is not available")
+qcmd_cli.core.command_generator.ModelUnavailableError: Model 'custom-model' is not available
+
+======================================================================
+ERROR: test_generate_command_fallback_with_empty_response (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with fallback and empty response.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 502, in test_generate_command_fallback_with_empty_response
+    ]
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 214, in generate_command
+    raise ModelUnavailableError(f"Model '{model}' is not available")
+qcmd_cli.core.command_generator.ModelUnavailableError: Model 'custom-model' is not available
+
+======================================================================
+ERROR: test_generate_command_fallback_with_retries (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with fallback and retries.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 424, in test_generate_command_fallback_with_retries
+    ]
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 214, in generate_command
+    raise ModelUnavailableError(f"Model '{model}' is not available")
+qcmd_cli.core.command_generator.ModelUnavailableError: Model 'custom-model' is not available
+
+======================================================================
+ERROR: test_generate_command_general_exception (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with other exceptions.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 237, in generate_command
+    response = requests.post(f"{OLLAMA_API}/generate", json=payload, timeout=REQUEST_TIMEOUT)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 237, in generate_command
+    response = requests.post(f"{OLLAMA_API}/generate", json=payload, timeout=REQUEST_TIMEOUT)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 237, in generate_command
+    response = requests.post(f"{OLLAMA_API}/generate", json=payload, timeout=REQUEST_TIMEOUT)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1093, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1097, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/lib/python3.9/unittest/mock.py", line 1152, in _execute_mock_call
+    raise effect
+Exception: Unexpected error
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 133, in test_generate_command_general_exception
+    mock_post.side_effect = Exception("Unexpected error")
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 270, in generate_command
+    _handle_api_error(e, attempt, max_retries, retry_delay)
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 146, in _handle_api_error
+    raise CommandGenerationError(f"Unexpected API error: {error}")
+qcmd_cli.core.command_generator.CommandGenerationError: Unexpected API error: Unexpected error
+
+======================================================================
+ERROR: test_generate_command_list_models_exception (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command when list_models raises an exception.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 274, in test_generate_command_list_models_exception
+    mock_post.return_value = mock_response
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 214, in generate_command
+    raise ModelUnavailableError(f"Model '{model}' is not available")
+qcmd_cli.core.command_generator.ModelUnavailableError: Model 'qwen2.5-coder:0.5b' is not available
+
+======================================================================
+ERROR: test_generate_command_model_unavailable (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command when requested model is not available.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 698, in test_generate_command_model_unavailable
+    mock_list_models.return_value = ["model1", "model2"]
+NameError: name 'ModelUnavailableError' is not defined
+
+======================================================================
+ERROR: test_generate_command_request_exception (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with general request exceptions.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 120, in test_generate_command_request_exception
+    mock_post.return_value = mock_response
+  File "/com.docker.devenvironments.code/qcmd_cli/core/command_generator.py", line 214, in generate_command
+    raise ModelUnavailableError(f"Model '{model}' is not available")
+qcmd_cli.core.command_generator.ModelUnavailableError: Model 'custom-model' is not available
+
+======================================================================
+ERROR: test_generate_command_validation_errors (tests.core.test_command_generator_additional.TestCommandGeneratorAdditional)
+Test generate_command with various validation errors.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/unittest/mock.py", line 1337, in patched
+    return func(*newargs, **newkeywargs)
+  File "/com.docker.devenvironments.code/tests/core/test_command_generator_additional.py", line 714, in test_generate_command_validation_errors
+NameError: name 'CommandValidationError' is not defined
+
+----------------------------------------------------------------------
+Ran 49 tests in 39.585s
+
+FAILED (errors=27)
+[94mGenerating fixed command with [1mqwen2.5-coder:0.5b[0m[94m...[0m
+[94mGenerating fixed command with [1mqwen2.5-coder:0.5b[0m[94m...[0m
+[94mGenerating fixed command with [1mqwen2.5-coder:0.5b[0m[94m...[0m
+[94mGenerating fixed command with [1mqwen2.5-coder:0.5b[0m[94m...[0m
+[94mGenerating fixed command with [1mqwen2.5-coder:0.5b[0m[94m...[0m
+[94mGenerating fixed command with [1mqwen2.5-coder:0.5b[0m[94m...[0m
+[94mGenerating fixed command with [1mqwen2.5-coder:0.5b[0m[94m...[0m
+[94mGenerating fixed command with [1mqwen2.5-coder:0.5b[0m[94m...[0m
+[94mGenerating fixed command with [1mqwen2.5-coder:0.5b[0m[94m...[0m

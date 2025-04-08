@@ -1,0 +1,62 @@
+name: Python Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11']
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 pytest pytest-cov
+        pip install -e .[dev]
+    
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Run safe tests
+      run: |
+        # Run safe tests first
+        pytest -v -k "not (dangerous or process or timeout or execute or ssh)" --cov=qcmd_cli
+      
+    - name: Run API tests with mocks
+      run: |
+        # Run API tests with proper mocking
+        pytest -v -m "api" --cov=qcmd_cli --cov-append
+      
+    - name: Run process tests in isolation
+      if: success()  # Only run if previous steps passed
+      run: |
+        # Run process tests in isolation
+        pytest -v -m "process" --cov=qcmd_cli --cov-append
+      
+    - name: Run dangerous tests in controlled environment
+      if: success()  # Only run if previous steps passed
+      env:
+        TEST_MODE: CI  # Special flag to indicate we're in CI
+      run: |
+        # Run dangerous tests last and only in CI
+        pytest -v -m "dangerous" --cov=qcmd_cli --cov-append
+      
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      if: success() 

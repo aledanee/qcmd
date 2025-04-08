@@ -1,0 +1,8 @@
+#!/bin/bash
+# Simple wrapper for qcmd.py
+
+# Get the directory of this script
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Run the Python script with all arguments
+python3 "$SCRIPT_DIR/qcmd.py" "$@" 
