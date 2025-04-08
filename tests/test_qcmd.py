@@ -8,13 +8,14 @@ import os
 import sys
 import tempfile
 from unittest.mock import patch, MagicMock
+import subprocess
 
 # Add parent directory to path so we can import modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import functions to test
 try:
-    from qcmd_cli.core.command_generator import is_dangerous_command
+    from qcmd_cli.core.command_generator import is_dangerous_command, execute_command
     from qcmd_cli.config.settings import load_config, save_config, CONFIG_FILE
 except ImportError:
     # If running as script
@@ -83,6 +84,28 @@ class TestQcmdConfig(unittest.TestCase):
         self.assertEqual(loaded_config["timeout"], test_config["timeout"])
         self.assertEqual(loaded_config["favorite_logs"], test_config["favorite_logs"])
         self.assertEqual(loaded_config["analyze_errors"], test_config["analyze_errors"])
+
+
+class TestQcmdExecutor(unittest.TestCase):
+    """Test the command execution features of qcmd."""
+    
+    @patch('subprocess.Popen')
+    def test_command_timeout(self, mock_popen):
+        """Test that command execution handles timeouts correctly."""
+        # Setup mock to simulate TimeoutExpired
+        process_mock = MagicMock()
+        process_mock.communicate.side_effect = subprocess.TimeoutExpired(cmd="test", timeout=2)
+        mock_popen.return_value = process_mock
+        
+        # Test with a short timeout
+        return_code, output = execute_command("sleep 10", timeout=2)
+        
+        # Verify results
+        self.assertEqual(return_code, 1)
+        self.assertTrue("timed out after 2 seconds" in output)
+        
+        # Verify process was terminated
+        process_mock.terminate.assert_called_once()
 
 
 if __name__ == '__main__':
