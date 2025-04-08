@@ -50,7 +50,7 @@ jobs:
         pytest -v -m "process" --cov=qcmd_cli --cov-append
       
     - name: Run dangerous tests in controlled environment
-      if: success()  # Only run if previous steps passed
+      if: success()  # Only run if previous steps passed.
       env:
         TEST_MODE: CI  # Special flag to indicate we're in CI
       run: |
