@@ -21,8 +21,8 @@ REQUEST_TIMEOUT = 30  # Timeout for API requests in seconds
 
 # Additional dangerous patterns for improved detection
 DANGEROUS_PATTERNS = [
-    # File system operations
-    "rm -rf", "rm -r /", "rm -f /", "rmdir /", "shred -uz", 
+    # File system operations (more specific to avoid false positives)
+    "rm -rf /", "rm -r /", "rm -f /", "rmdir /", "shred -uz", 
     "mkfs", "dd if=/dev/zero", "format", "fdisk", "mkswap",
     # Disk operations
     "> /dev/sd", "of=/dev/sd", "dd of=/dev", 
@@ -437,11 +437,32 @@ def is_dangerous_command(command: str) -> bool:
     for pattern in DANGEROUS_PATTERNS:
         if pattern.lower() in command_lower:
             return True
-            
+    
     # Check for commands that might delete or overwrite system files
-    if ("rm" in command_lower) and ("/" in command_lower) and not ("./") in command_lower:
-        return True
+    if "rm" in command_lower and "/" in command_lower:
+        # Split the command to examine each part
+        parts = command_lower.split()
         
+        # Find command arguments (skip program name and options)
+        path_args = []
+        for i, part in enumerate(parts):
+            # Skip the command name and options
+            if i == 0 or part.startswith("-"):
+                continue
+            # This might be a path argument
+            if "/" in part:
+                path_args.append(part)
+                
+        # Analyze path arguments
+        for path in path_args:
+            # Safe if it starts with "./" or "../" (relative paths)
+            if path.startswith("./") or path.startswith("../"):
+                continue
+            # If it contains a slash but isn't a relative path, consider it dangerous
+            # This catches absolute paths like /home, /etc, etc.
+            else:
+                return True
+    
     # Check for sudo or doas with potentially risky commands
     if ("sudo" in command_lower or "doas" in command_lower) and any(risky in command_lower for risky in [
         "rm", "mkfs", "dd", "fdisk", "chmod", "chown", "mv"
