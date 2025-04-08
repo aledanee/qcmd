@@ -1,0 +1,23 @@
+# Set default behavior to automatically normalize line endings
+* text=auto
+
+# Declare files that will always have LF line endings on checkout
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.bash text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+
+# Denote all files that are truly binary and should not be modified
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.gz binary
+*.zip binary
+*.tar binary 

@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""
+QCMD script - wrapper for the modular QCMD CLI
+This script directly calls the main function in the handler module
+"""
+
+import sys
+import os
+
+# Add the parent directory to the path
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+
+# Import the main function from the handler module
+from qcmd_cli.commands.handler import main
+
+if __name__ == "__main__":
+    sys.exit(main()) 

@@ -1,0 +1,3 @@
+[console_scripts]
+qcmd = qcmd_cli.commands.handler:main
+qcmd-post-install = qcmd_cli.post_install:main
