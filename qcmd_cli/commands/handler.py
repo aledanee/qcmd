@@ -43,6 +43,8 @@ def parse_args():
                         help='Enable auto-correction mode')
     parser.add_argument('-t', '--temperature', type=float, default=None,
                        help='Set the temperature for generation (0.0-1.0)')
+    parser.add_argument('--timeout', type=int, default=60,
+                       help='Set the timeout for command execution in seconds (default: 60)')
     
     # Utility commands
     parser.add_argument('--status', action='store_true',
@@ -203,7 +205,12 @@ def main():
     # Execute if requested, otherwise just display
     if args.execute:
         print(f"\nExecuting: {command}\n")
-        return_code, output = execute_command(command)
+        return_code, output = execute_command(
+            command, 
+            analyze_errors=True, 
+            model=args.model,
+            timeout=args.timeout
+        )
         
         if return_code == 0:
             print(f"\nCommand executed successfully.")

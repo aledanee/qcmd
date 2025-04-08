@@ -9,6 +9,7 @@ import requests
 import sys
 import subprocess
 import shlex
+import logging
 from typing import List, Optional, Dict, Tuple, Any
 
 from ..ui.display import Colors
@@ -322,7 +323,7 @@ def list_models() -> List[str]:
         print(f"{Colors.YELLOW}Error listing models: {e}{Colors.END}", file=sys.stderr)
         return []
 
-def execute_command(command: str, analyze_errors: bool = False, model: str = DEFAULT_MODEL) -> Tuple[int, str]:
+def execute_command(command: str, analyze_errors: bool = False, model: str = DEFAULT_MODEL, timeout: int = 60) -> Tuple[int, str]:
     """
     Execute a shell command and capture output.
     
@@ -330,6 +331,7 @@ def execute_command(command: str, analyze_errors: bool = False, model: str = DEF
         command: The command to execute
         analyze_errors: Whether to analyze errors if the command fails
         model: The model to use for error analysis
+        timeout: Maximum execution time in seconds (default: 60)
         
     Returns:
         Tuple of (return_code, output)
@@ -355,9 +357,9 @@ def execute_command(command: str, analyze_errors: bool = False, model: str = DEF
             text=True
         )
         
-        # Use a timeout (60 seconds by default)
+        # Use configurable timeout
         try:
-            stdout, stderr = process.communicate(timeout=60)
+            stdout, stderr = process.communicate(timeout=timeout)
             return_code = process.returncode
             
             # Combine stdout and stderr
@@ -367,16 +369,57 @@ def execute_command(command: str, analyze_errors: bool = False, model: str = DEF
                     output += "\n" + stderr
                 else:
                     output = stderr
+
+            # If command failed and analyze_errors is True, get AI analysis
+            if return_code != 0 and analyze_errors and stderr:
+                print(f"{Colors.YELLOW}Command failed with return code {return_code}.{Colors.END}")
+                print(f"{Colors.BLUE}Analyzing error...{Colors.END}")
+                error_analysis = analyze_error(stderr, command, model)
+                if error_analysis:
+                    output += f"\n\n{Colors.BOLD}Error Analysis:{Colors.END}\n{error_analysis}"
                 
             return (return_code, output)
             
         except subprocess.TimeoutExpired:
-            process.kill()
-            _, _ = process.communicate()
-            return (1, "Command execution timed out after 60 seconds.")
+            # Attempt to gracefully terminate the process
+            print(f"{Colors.RED}Command execution timed out after {timeout} seconds. Terminating...{Colors.END}")
+            process.terminate()
             
+            try:
+                # Give the process 5 seconds to terminate gracefully
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                # Force kill if it doesn't terminate gracefully
+                process.kill()
+                print(f"{Colors.RED}Process had to be forcefully terminated.{Colors.END}")
+            
+            # Collect any output that might have been generated before timeout
+            try:
+                stdout, stderr = process.communicate(timeout=2)
+                partial_output = stdout if stdout else ""
+                if stderr:
+                    partial_output += "\n" + stderr if partial_output else stderr
+                
+                timeout_message = f"Command execution timed out after {timeout} seconds."
+                if partial_output:
+                    timeout_message += f"\n\nPartial output before timeout:\n{partial_output}"
+                
+                return (1, timeout_message)
+            except:
+                return (1, f"Command execution timed out after {timeout} seconds.")
+            
+    except FileNotFoundError:
+        error_msg = f"Error: Command not found or executable could not be run."
+        print(f"{Colors.RED}{error_msg}{Colors.END}", file=sys.stderr)
+        return (127, error_msg)
+    except PermissionError:
+        error_msg = f"Error: Permission denied when trying to execute command."
+        print(f"{Colors.RED}{error_msg}{Colors.END}", file=sys.stderr)
+        return (126, error_msg)
     except Exception as e:
-        return (1, f"Error executing command: {e}")
+        error_msg = f"Error executing command: {str(e)}"
+        print(f"{Colors.RED}{error_msg}{Colors.END}", file=sys.stderr)
+        return (1, error_msg)
 
 def is_dangerous_command(command: str) -> bool:
     """
