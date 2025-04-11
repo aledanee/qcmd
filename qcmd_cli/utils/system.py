@@ -340,7 +340,7 @@ def execute_command(command: str, analyze_errors: bool = False, model: str = Non
         Tuple of (exit_code, output)
     """
     print(f"\n{Colors.CYAN}Executing:{Colors.END} {Colors.GREEN}{command}{Colors.END}")
-    
+        
     try:
         # Run the command and capture output
         process = subprocess.Popen(
@@ -360,14 +360,14 @@ def execute_command(command: str, analyze_errors: bool = False, model: str = Non
         process.wait()
         exit_code = process.returncode
         output = ''.join(output_lines)
-                    
+            
         return exit_code, output
         
     except Exception as e:
         error_msg = f"Error executing command: {str(e)}"
         print(f"{Colors.RED}{error_msg}{Colors.END}")
         return 1, error_msg
-
+        
 def format_bytes(bytes_value):
     """
     Format byte values to human-readable format.

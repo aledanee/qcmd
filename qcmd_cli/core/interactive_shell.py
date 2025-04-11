@@ -22,12 +22,40 @@ from qcmd_cli.ui.display import Colors, print_cool_header, clear_screen
 from qcmd_cli.core.command_generator import generate_command, is_dangerous_command, list_models, fix_command
 from qcmd_cli.utils.history import save_to_history, load_history, show_history
 from qcmd_cli.utils.system import execute_command, get_system_status, display_update_status
-from qcmd_cli.log_analysis.analyzer import handle_log_analysis, analyze_log_file
+from qcmd_cli.log_analysis.log_files import handle_log_analysis
+from qcmd_cli.log_analysis.analyzer import analyze_log_file
 from qcmd_cli.ui.display import display_system_status
 from qcmd_cli.utils.ollama import is_ollama_running
 
 # Setup session tracking
-from qcmd_cli.utils.session import create_session, update_session_activity, cleanup_stale_sessions
+from qcmd_cli.utils.session import create_session, update_session_activity, cleanup_stale_sessions, end_session
+
+class SimpleCompleter:
+    """
+    Simple command completion for the interactive shell.
+    """
+    def __init__(self, options):
+        self.options = options
+        
+    def complete(self, text, state):
+        """
+        Return state'th completion starting with text.
+        """
+        response = None
+        if state == 0:
+            # This is the first time for this text, so build a match list
+            if text:
+                self.matches = [s for s in self.options if s and s.startswith(text)]
+            else:
+                self.matches = self.options[:]
+        
+        # Return the state'th item from the match list, if we have that many
+        try:
+            response = self.matches[state]
+        except IndexError:
+            return None
+            
+        return response
 
 def start_interactive_shell(
     auto_mode_enabled: bool = False, 
@@ -97,7 +125,6 @@ def start_interactive_shell(
     def signal_handler(sig, frame):
         print(f"\n{Colors.CYAN}Received signal {sig}, exiting...{Colors.END}")
         # End the session when receiving a signal
-        from qcmd_cli.utils.session import end_session
         try:
             end_session(session_id)
         except Exception:
@@ -582,4 +609,60 @@ def _display_banner():
     
     print(f"║                                              {version_text}        ║")
     print(f"║                                                             ║")
-    print(f"╚═════════════════════════════════════════════════════════════╝") 
+    print(f"╚═════════════════════════════════════════════════════════════╝")
+
+def auto_mode(prompt: str, model: str = DEFAULT_MODEL, max_attempts: int = 3, temperature: float = 0.7) -> None:
+    """
+    Run in auto-correction mode, automatically fixing errors.
+    
+    Args:
+        prompt: The natural language prompt
+        model: The model to use
+        max_attempts: Maximum number of correction attempts
+        temperature: Temperature parameter for generation
+    """
+    print(f"{Colors.CYAN}Generating command in auto-correction mode...{Colors.END}")
+    
+    # Generate initial command
+    command = generate_command(prompt, model, temperature)
+    
+    if not command:
+        print(f"{Colors.RED}Failed to generate a command.{Colors.END}")
+        return
+    
+    for attempt in range(1, max_attempts + 1):
+        if attempt > 1:
+            print(f"\n{Colors.CYAN}Attempt {attempt}/{max_attempts}:{Colors.END}")
+            
+        print(f"\n{Colors.CYAN}Generated command:{Colors.END}")
+        print(f"{Colors.GREEN}{command}{Colors.END}\n")
+        
+        # Execute the command
+        print(f"{Colors.CYAN}Executing command...{Colors.END}\n")
+        return_code, output = execute_command(command)
+        
+        if return_code == 0:
+            print(f"\n{Colors.GREEN}Command executed successfully.{Colors.END}")
+            if output:
+                print(f"\n{Colors.BOLD}Output:{Colors.END}")
+                print(output)
+            return
+        else:
+            print(f"\n{Colors.RED}Command failed with return code {return_code}{Colors.END}")
+            if output:
+                print(f"\n{Colors.BOLD}Error output:{Colors.END}")
+                print(output)
+            
+            # Don't attempt to fix if we've reached max attempts
+            if attempt >= max_attempts:
+                print(f"\n{Colors.YELLOW}Maximum correction attempts reached. Giving up.{Colors.END}")
+                return
+                
+            # Try to fix the command
+            print(f"\n{Colors.CYAN}Attempting to fix the command...{Colors.END}")
+            command = fix_command(command, output, model)
+            
+            # Add a small delay to make the process more readable
+            time.sleep(1)
+
+
