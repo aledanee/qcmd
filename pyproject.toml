@@ -1,47 +1,58 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 # This uses the PyPI-optimized README for better display on PyPI
 name = "ibrahimiq-qcmd"
-version = "1.0.10"
+version = "1.0.0"
 authors = [
-  {name = "Ibrahim", email = "ibrahimihssan1@gmail.com"},
+    {name = "Ibrahim IQ", email = "example@example.com"}
 ]
-description = "Generate and execute shell commands using AI models via Ollama"
-readme = "PYPI-README.md"
-license = "MIT"
-requires-python = ">=3.6"
+description = "A command-line tool that generates shell commands using Qwen2.5-Coder via Ollama"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
-    "Operating System :: POSIX :: Linux",
-    "Operating System :: MacOS",
+    "Topic :: System :: Shells",
     "Topic :: Utilities",
-    "Environment :: Console",
 ]
 dependencies = [
     "requests>=2.25.0",
-    "configparser>=5.0.0",
+    "pyfiglet>=0.8.0",
     # Uncomment below for older Python versions, but not needed with our fix:
     # "setuptools>=61.0.0",
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/aledanee/qcmd"
-"Bug Tracker" = "https://github.com/aledanee/qcmd/issues"
+"Homepage" = "https://github.com/ibrahimiq/qcmd"
+"Issues" = "https://github.com/ibrahimiq/qcmd/issues"
 "Documentation" = "https://github.com/aledanee/qcmd/blob/main/qcmd-docs.html"
 
 [tool.setuptools]
-packages = ["qcmd_cli"]
+packages = [
+    "qcmd_cli",
+    "qcmd_cli.core",
+    "qcmd_cli.ui",
+    "qcmd_cli.utils",
+    "qcmd_cli.log_analysis",
+    "qcmd_cli.config",
+    "qcmd_cli.commands"
+]
 py-modules = []
 
 [tool.setuptools.package-data]
-qcmd_cli = ["*.bash"]
+"qcmd_cli" = ["__init__.py"]
 
 [project.scripts]
-qcmd = "qcmd_cli.qcmd:main" 
+qcmd = "qcmd_cli.commands.handler:main"
+qcmd-post-install = "qcmd_cli.post_install:main" 
