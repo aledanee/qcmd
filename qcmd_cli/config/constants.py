@@ -14,7 +14,7 @@ SESSIONS_FILE = os.path.join(CONFIG_DIR, "sessions.json")
 OLLAMA_API = os.environ.get("OLLAMA_API", "http://127.0.0.1:11434/api")
 
 # Version
-VERSION = "1.0.10"
+VERSION = "1.0.16"
 
 # System prompt template for command generation
 SYSTEM_PROMPT_TEMPLATE = """You are QCMD, an AI assistant specialized in Linux system administration, log analysis, and command generation. 
