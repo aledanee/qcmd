@@ -1579,7 +1579,7 @@ def display_log_selection(log_files: List[str]) -> Optional[str]:
             if choice in file_indices:
                 return file_indices[choice]
             else:
-                print(f"{Colors.YELLOW}Invalid selection. Please try again.{Colors.END}")
+                print(f"{Colors.YELLOW}Invalid selection '{choice}'. Please enter a number between 1 and {len(file_indices)}.{Colors.END}")
         except ValueError:
             print(f"{Colors.YELLOW}Please enter a number or 'q' to cancel.{Colors.END}")
         except KeyboardInterrupt:

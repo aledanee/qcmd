@@ -2,7 +2,7 @@
 """
 qcmd - A simple command-line tool that generates shell commands using Qwen2.5-Coder via Ollama.
 
-Version: 1.0.0
+Version: 1.0.16
 Copyright (c) 2024
 License: MIT
 

@@ -2,7 +2,13 @@
 QCMD CLI - A command-line tool that generates shell commands using Qwen2.5-Coder via Ollama.
 """
 
-__version__ = "1.0.15"
+# Import version from environment loader
+try:
+    from .utils.env_loader import get_version
+    __version__ = get_version()
+except ImportError:
+    # Fallback for backward compatibility
+    __version__ = "1.0.16"
 
 # Don't import modules here to avoid circular dependencies
 
