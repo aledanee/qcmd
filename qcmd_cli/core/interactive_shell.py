@@ -21,10 +21,9 @@ from qcmd_cli.config.constants import CONFIG_DIR
 from qcmd_cli.ui.display import Colors, print_cool_header, clear_screen
 from qcmd_cli.core.command_generator import generate_command, is_dangerous_command, list_models, fix_command
 from qcmd_cli.utils.history import save_to_history, load_history, show_history
-from qcmd_cli.utils.system import execute_command, get_system_status, display_update_status
+from qcmd_cli.utils.system import execute_command, get_system_status, display_update_status, display_system_status
 from qcmd_cli.log_analysis.log_files import handle_log_analysis
 from qcmd_cli.log_analysis.analyzer import analyze_log_file
-from qcmd_cli.ui.display import display_system_status
 from qcmd_cli.utils.ollama import is_ollama_running
 
 # Setup session tracking
@@ -196,8 +195,7 @@ def start_interactive_shell(
                 elif user_input.lower() == '/status':
                     # Show system status
                     print(f"\n{Colors.CYAN}Getting system status...{Colors.END}")
-                    status = get_system_status()
-                    display_system_status(status)
+                    display_system_status()
                     continue
                     
                 elif user_input.lower() == '/update':
