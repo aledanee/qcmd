@@ -2,7 +2,7 @@
 QCMD CLI - A command-line tool that generates shell commands using Qwen2.5-Coder via Ollama.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.15"
 
 # Don't import modules here to avoid circular dependencies
 

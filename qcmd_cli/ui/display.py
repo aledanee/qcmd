@@ -7,7 +7,7 @@ import sys
 import time
 import re
 import shutil
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 class Colors:
     """
@@ -224,4 +224,76 @@ def display_help_command(current_model: str, current_temperature: float, auto_mo
 - Type 'y' to execute, 'n' to reject, or edit the command
 - Use !exit or Ctrl+D to quit
 """
-    print(help_text) 
+    print(help_text)
+
+def clear_screen():
+    """
+    Clear the terminal screen.
+    """
+    # Clear command based on OS
+    if os.name == 'nt':  # For Windows
+        os.system('cls')
+    else:  # For Linux/Mac
+        os.system('clear')
+
+def display_system_status(status: Dict[str, Any]) -> None:
+    """
+    Display detailed system status information.
+    
+    Args:
+        status: Dictionary with system status information
+    """
+    # Print divider line
+    print(f"\n{Colors.CYAN}{'-' * 80}{Colors.END}")
+    
+    # System information
+    print(f"\n{Colors.RED}{Colors.BOLD}System Information:{Colors.END}")
+    print(f"  {Colors.BLUE}OS:{Colors.END} {status.get('os', 'Unknown')}")
+    print(f"  {Colors.BLUE}Python Version:{Colors.END} {status.get('python_version', 'Unknown')}")
+    print(f"  {Colors.BLUE}QCMD Version:{Colors.END} {status.get('qcmd_version', 'Unknown')}")
+    print(f"  {Colors.BLUE}Current Time:{Colors.END} {status.get('time', 'Unknown')}")
+    
+    # Ollama information
+    if 'ollama' in status:
+        ollama = status['ollama']
+        print(f"\n{Colors.RED}{Colors.BOLD}Ollama Status:{Colors.END}")
+        
+        # Check if Ollama is running
+        if ollama.get('status', '') == 'running':
+            print(f"  {Colors.BLUE}Status:{Colors.END} {Colors.GREEN}Running{Colors.END}")
+        else:
+            print(f"  {Colors.BLUE}Status:{Colors.END} {Colors.RED}Not Running{Colors.END}")
+            if 'error' in ollama:
+                print(f"  {Colors.BLUE}Error:{Colors.END} {ollama['error']}")
+        
+        print(f"  {Colors.BLUE}API URL:{Colors.END} {ollama.get('api_url', 'Unknown')}")
+        
+        # List available models
+        if 'models' in ollama and ollama['models']:
+            print(f"  {Colors.BLUE}Available Models:{Colors.END}")
+            for model in ollama['models']:
+                print(f"    - {model}")
+        elif ollama.get('status', '') == 'running':
+            print(f"  {Colors.BLUE}Available Models:{Colors.END} No models found")
+    
+    # Active monitors
+    if 'active_monitors' in status and status['active_monitors']:
+        print(f"\n{Colors.RED}{Colors.BOLD}Active Log Monitors:{Colors.END}")
+        for monitor in status['active_monitors']:
+            print(f"  - {monitor}")
+    
+    # Active sessions
+    if 'active_sessions' in status and status['active_sessions']:
+        print(f"\n{Colors.RED}{Colors.BOLD}Active Sessions:{Colors.END}")
+        for session in status['active_sessions']:
+            print(f"  - {session}")
+    
+    # Disk space
+    if 'disk' in status:
+        disk = status['disk']
+        print(f"\n{Colors.RED}{Colors.BOLD}Disk Space:{Colors.END}")
+        print(f"  {Colors.BLUE}Total:{Colors.END} {disk.get('total_gb', 'Unknown')} GB")
+        print(f"  {Colors.BLUE}Used:{Colors.END} {disk.get('used_gb', 'Unknown')} GB ({disk.get('percent_used', 'Unknown')}%)")
+        print(f"  {Colors.BLUE}Free:{Colors.END} {disk.get('free_gb', 'Unknown')} GB")
+    
+    print(f"\n{Colors.CYAN}{'-' * 80}{Colors.END}") 

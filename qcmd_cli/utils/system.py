@@ -9,8 +9,10 @@ import platform
 import requests
 import json
 import shutil
+import time
+import re
 from datetime import datetime
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Any, Tuple, List, Optional
 
 from ..ui.display import Colors
 from ..config.settings import CONFIG_DIR, load_config, DEFAULT_MODEL
@@ -199,48 +201,185 @@ def display_system_status():
         filled_length = int(bar_width * percent / 100)
         bar = f"{Colors.GREEN}{'█' * filled_length}{Colors.YELLOW}{'░' * (bar_width - filled_length)}{Colors.END}"
         
-        print(f"  {Colors.BOLD}•{Colors.END} Total: {Colors.YELLOW}{total_gb:.2f} GB{Colors.END}")
-        print(f"  {Colors.BOLD}•{Colors.END} Used: {Colors.YELLOW}{used_gb:.2f} GB{Colors.END} ({percent:.1f}%)")
-        print(f"  {Colors.BOLD}•{Colors.END} Free: {Colors.YELLOW}{free_gb:.2f} GB{Colors.END}")
-        print(f"  {Colors.BOLD}•{Colors.END} Usage: {bar}")
+        print(f"  {Colors.BOLD}•{Colors.END} Space on {Colors.YELLOW}{CONFIG_DIR}{Colors.END}:")
+        print(f"  {Colors.BOLD}•{Colors.END} Used: {Colors.YELLOW}{used_gb:.2f} GB{Colors.END} / Free: {Colors.YELLOW}{free_gb:.2f} GB{Colors.END} / Total: {Colors.YELLOW}{total_gb:.2f} GB{Colors.END}")
+        print(f"  {Colors.BOLD}•{Colors.END} Usage: {Colors.YELLOW}{percent:.1f}%{Colors.END}")
+        print(f"  {bar}")
     else:
-        print(f"  {Colors.YELLOW}Could not get disk space information.{Colors.END}")
+        print(f"  {Colors.YELLOW}Configuration directory not found.{Colors.END}")
     
-    # Configuration section
-    print(f"\n{Colors.CYAN}{Colors.BOLD}► CONFIGURATION{Colors.END}")
-    print(f"  {Colors.BOLD}•{Colors.END} Default Model: {Colors.YELLOW}{config.get('model', DEFAULT_MODEL)}{Colors.END}")
-    print(f"  {Colors.BOLD}•{Colors.END} Temperature: {Colors.YELLOW}{config.get('temperature', 0.7)}{Colors.END}")
-    print(f"  {Colors.BOLD}•{Colors.END} Auto-Correction Max Attempts: {Colors.YELLOW}{config.get('max_attempts', 3)}{Colors.END}")
-    print(f"  {Colors.BOLD}•{Colors.END} Config Directory: {Colors.YELLOW}{CONFIG_DIR}{Colors.END}")
-    print(f"  {Colors.BOLD}•{Colors.END} Show Banner: {Colors.YELLOW}{config.get('ui', {}).get('show_iraq_banner', True)}{Colors.END}")
-    print(f"  {Colors.BOLD}•{Colors.END} Show Progress Bar: {Colors.YELLOW}{config.get('ui', {}).get('show_progress_bar', True)}{Colors.END}")
+    # Add update status
+    print(f"\n{Colors.CYAN}{Colors.BOLD}► UPDATE STATUS{Colors.END}")
+    update_info = check_for_updates(False)
+    if update_info:
+        current_version = update_info.get('current_version', 'Unknown')
+        latest_version = update_info.get('latest_version', 'Unknown')
+        update_available = update_info.get('update_available', False)
+        
+        if update_available:
+            print(f"  {Colors.BOLD}•{Colors.END} Update Available: {Colors.GREEN}Yes{Colors.END}")
+            print(f"  {Colors.BOLD}•{Colors.END} Current Version: {Colors.YELLOW}{current_version}{Colors.END}")
+            print(f"  {Colors.BOLD}•{Colors.END} Latest Version: {Colors.GREEN}{latest_version}{Colors.END}")
+            print(f"  {Colors.BOLD}•{Colors.END} Update Command: {Colors.GREEN}pip install --upgrade ibrahimiq-qcmd{Colors.END}")
+        else:
+            print(f"  {Colors.BOLD}•{Colors.END} Status: {Colors.GREEN}Up to date{Colors.END}")
+            print(f"  {Colors.BOLD}•{Colors.END} Version: {Colors.YELLOW}{current_version}{Colors.END}")
+    else:
+        print(f"  {Colors.YELLOW}Could not check for updates.{Colors.END}")
     
+    # Footer
     print(f"\n{Colors.BOLD}╚════════════════════════════════════════════════════════════════════════════════════════════════╝{Colors.END}\n")
 
-def check_for_updates(force_display: bool = False) -> None:
+def check_for_updates(force_display: bool = False) -> Optional[Dict[str, Any]]:
     """
-    Check if there's a newer version of the package available on PyPI
+    Check for QCMD updates by querying PyPI.
     
     Args:
-        force_display: Whether to display a message even if no update is found
-    """
-    try:
-        # Get installed version - use version from module directly
-        installed_version = __version__
+        force_display: Whether to force displaying the update status
         
-        # Check latest version on PyPI
-        response = requests.get("https://pypi.org/pypi/ibrahimiq-qcmd/json", timeout=3)
+    Returns:
+        Dictionary with update information or None if check fails
+    """
+    # Get current version
+    current_version = __version__
+    
+    # Load config to check if updates are disabled
+    config = load_config()
+    if not force_display and config.get('disable_update_check', False):
+        return None
+    
+    # Try to get the latest version from PyPI
+    latest_version = None
+    try:
+        response = requests.get("https://pypi.org/pypi/ibrahimiq-qcmd/json", timeout=5)
         if response.status_code == 200:
-            latest_version = response.json()["info"]["version"]
+            data = response.json()
+            latest_version = data['info']['version']
+    except Exception:
+        # If we can't connect to PyPI, just return None
+        return None
+    
+    # If we couldn't get the latest version, return None
+    if not latest_version:
+        return None
+    
+    # Compare versions
+    current_parts = current_version.split('.')
+    latest_parts = latest_version.split('.')
+    
+    update_available = False
+    
+    # Compare major, minor, patch versions
+    for c, l in zip(current_parts, latest_parts):
+        if int(l) > int(c):
+            update_available = True
+            break
+        elif int(l) < int(c):
+            # Current is newer (development version)
+            break
+    
+    # If different number of parts and no decision yet,
+    # the one with more parts is considered newer
+    if not update_available and len(latest_parts) > len(current_parts):
+        update_available = True
+    
+    result = {
+        'current_version': current_version,
+        'latest_version': latest_version,
+        'update_available': update_available
+    }
+    
+    # Display the info if requested
+    if force_display:
+        if update_available:
+            print(f"\n{Colors.YELLOW}Update available!{Colors.END}")
+            print(f"Current version: {Colors.RED}{current_version}{Colors.END}")
+            print(f"Latest version: {Colors.GREEN}{latest_version}{Colors.END}")
+            print(f"To update, run: {Colors.GREEN}pip install --upgrade ibrahimiq-qcmd{Colors.END}")
+        else:
+            print(f"\n{Colors.GREEN}QCMD is up to date!{Colors.END}")
+            print(f"Current version: {Colors.GREEN}{current_version}{Colors.END}")
+    
+    return result
+
+def display_update_status() -> None:
+    """
+    Display the update status with improved formatting.
+    """
+    # Load config to check if updates are disabled
+    config = load_config()
+    if config.get('disable_update_check', False):
+        return
+    
+    update_info = check_for_updates(False)
+    if update_info and update_info.get('update_available', False):
+        current_version = update_info.get('current_version', 'Unknown')
+        latest_version = update_info.get('latest_version', 'Unknown')
+        
+        # Create a nice-looking update message
+        print(f"\n{Colors.YELLOW}╔═══════════════════════════════════════════════════════════════╗{Colors.END}")
+        print(f"{Colors.YELLOW}║  {Colors.BOLD}UPDATE AVAILABLE{Colors.END}{Colors.YELLOW}                                             ║{Colors.END}")
+        print(f"{Colors.YELLOW}║                                                               ║{Colors.END}")
+        print(f"{Colors.YELLOW}║  Current version: {Colors.RED}{current_version.ljust(10)}{Colors.YELLOW}                                  ║{Colors.END}")
+        print(f"{Colors.YELLOW}║  Latest version:  {Colors.GREEN}{latest_version.ljust(10)}{Colors.YELLOW}                                  ║{Colors.END}")
+        print(f"{Colors.YELLOW}║                                                               ║{Colors.END}")
+        print(f"{Colors.YELLOW}║  To update, run:                                              ║{Colors.END}")
+        print(f"{Colors.YELLOW}║  {Colors.GREEN}pip install --upgrade ibrahimiq-qcmd{Colors.YELLOW}                      ║{Colors.END}")
+        print(f"{Colors.YELLOW}╚═══════════════════════════════════════════════════════════════╝{Colors.END}\n")
+
+def execute_command(command: str, analyze_errors: bool = False, model: str = None) -> Tuple[int, str]:
+    """
+    Execute a shell command and return the exit code and output.
+    
+    Args:
+        command: The command to execute
+        analyze_errors: Whether to analyze errors if the command fails
+        model: Model to use for error analysis
+        
+    Returns:
+        Tuple of (exit_code, output)
+    """
+    print(f"\n{Colors.CYAN}Executing:{Colors.END} {Colors.GREEN}{command}{Colors.END}")
+        
+    try:
+        # Run the command and capture output
+        process = subprocess.Popen(
+            command,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+            bufsize=1
+        )
+        
+        output_lines = []
+        for line in process.stdout:
+            print(line, end='')
+            output_lines.append(line)
             
-            # Compare versions
-            if installed_version != latest_version:
-                print(f"\n{Colors.YELLOW}New version available: {Colors.BOLD}{latest_version}{Colors.END}")
-                print(f"{Colors.YELLOW}You have: {installed_version}{Colors.END}")
-                print(f"{Colors.YELLOW}Update with: {Colors.BOLD}pip install --upgrade ibrahimiq-qcmd{Colors.END}")
-            elif force_display:
-                print(f"{Colors.GREEN}You have the latest version: {Colors.BOLD}{installed_version}{Colors.END}")
+        process.wait()
+        exit_code = process.returncode
+        output = ''.join(output_lines)
+            
+        return exit_code, output
+        
     except Exception as e:
-        if force_display:
-            print(f"{Colors.YELLOW}Could not check for updates: {e}{Colors.END}")
-        # If update check fails, just skip it silently otherwise 
+        error_msg = f"Error executing command: {str(e)}"
+        print(f"{Colors.RED}{error_msg}{Colors.END}")
+        return 1, error_msg
+        
+def format_bytes(bytes_value):
+    """
+    Format byte values to human-readable format.
+    
+    Args:
+        bytes_value: Number of bytes
+        
+    Returns:
+        Human-readable string representation
+    """
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if bytes_value < 1024.0:
+            return f"{bytes_value:.2f} {unit}"
+        bytes_value /= 1024.0
+    return f"{bytes_value:.2f} PB" 

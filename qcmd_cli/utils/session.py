@@ -7,12 +7,60 @@ import json
 import time
 import signal
 import sys
+import uuid
 from typing import Dict, List, Optional, Any
 
 from ..config.settings import CONFIG_DIR
 
 # File path for storing session info
 SESSIONS_FILE = os.path.join(CONFIG_DIR, "sessions.json")
+
+def create_session(session_info: Dict[str, Any]) -> str:
+    """
+    Create a new session and save it to persistent storage.
+    
+    Args:
+        session_info: Dictionary with session information
+        
+    Returns:
+        Session ID as a string
+    """
+    # Generate a unique session ID
+    session_id = str(uuid.uuid4())
+    
+    # Add metadata
+    session_info['pid'] = os.getpid()
+    session_info['created_at'] = time.time()
+    session_info['last_activity'] = time.time()
+    
+    # Save to storage
+    save_session(session_id, session_info)
+    
+    return session_id
+
+def update_session_activity(session_id: str) -> bool:
+    """
+    Update the last activity timestamp for a session.
+    
+    Args:
+        session_id: ID of the session to update
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        sessions = load_sessions()
+        if session_id in sessions:
+            sessions[session_id]['last_activity'] = time.time()
+            
+            with open(SESSIONS_FILE, 'w') as f:
+                json.dump(sessions, f, indent=2)
+            
+            return True
+        return False
+    except Exception as e:
+        print(f"Error updating session activity: {e}", file=sys.stderr)
+        return False
 
 def save_session(session_id, session_info):
     """
