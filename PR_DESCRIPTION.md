@@ -21,11 +21,20 @@ Example:
   - `tests/functional/`: End-to-end tests for full workflows
 - Added extensive tests to verify the fix and prevent regression
 - Added a test runner script (`run_tests.py`) for easy test execution
+- Maintained the original test file at `tests/test_log_selection.py` for backward compatibility
 
 ### 3. Demo Scripts
 - Added demonstration scripts that show the problem and our fix:
   - `demos/demo_log_selection.py`: Shows the specific log selection fix
   - `demos/demo_full_log_analysis.py`: Shows the fix in the context of the full workflow
+
+### 4. Version Update
+- Bumped version from 1.0.15 to 1.0.16 in preparation for release
+- Updated version in:
+  - `qcmd_cli/__init__.py`
+  - `pyproject.toml`
+  - `qcmd_cli/config/constants.py`
+  - `qcmd_cli/qcmd.py`
 
 ## How to Test
 You can test the fix using these steps:
