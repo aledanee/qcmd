@@ -98,7 +98,7 @@ class TestDisplayFunctions(unittest.TestCase):
         # Check that the output includes ASCII art - look for typical parts
         all_print_output = ''.join(str(call) for call in mock_print.call_args_list)
         self.assertIn('█', all_print_output)
-        self.assertIn('Iraqi Excellence', all_print_output)
+        self.assertIn('AI-Powered', all_print_output)
         
     @patch('builtins.print')
     def test_colors(self, mock_print):
