@@ -89,94 +89,71 @@ def print_cool_header():
     Print the cool ASCII art header for QCMD.
     """
     header = """
-    ██████╗  ██████╗███╗   ███╗██████╗ 
-   ██╔═══██╗██╔════╝████╗ ████║██╔══██╗
-   ██║   ██║██║     ██╔████╔██║██║  ██║
-   ██║▄▄ ██║██║     ██║╚██╔╝██║██║  ██║
-   ╚██████╔╝╚██████╗██║ ╚═╝ ██║██████╔╝
-    ╚══▀▀═╝  ╚═════╝╚═╝     ╚═╝╚═════╝ 
+    ██████╗   ██████╗ ███╗   ███╗██████╗ 
+    ██╔═══██╗██╔════╝ ████╗ ████║██╔══██╗
+    ██║   ██║██║      ██╔████╔██║██║  ██║
+    ██║▄▄ ██║██║      ██║╚██╔╝██║██║  ██║
+    ╚██████╔╝╚██████╗ ██║ ╚═╝ ██║██████╔╝
+     ╚══▀▀═╝  ╚═════╝ ╚═╝     ╚═╝╚═════╝ 
     """
     
-    subtitle = "Iraqi Excellence in Command Generation"
+    subtitle = "AI-Powered Command Generator"
     
     print(f"{Colors.GREEN}{header}{Colors.END}")
-    print(f"{Colors.YELLOW}{Colors.BOLD}{subtitle.center(50)}{Colors.END}\n")
+    print(f"{Colors.YELLOW}{Colors.BOLD}{subtitle.center(55)}{Colors.END}\n")
 
 def print_examples():
     """
     Print example commands that can be used with QCMD.
     """
     examples = [
-        ("qcmd 'list files sorted by size'", "Generate a command to list files by size"),
-        ("qcmd --auto 'find text in files'", "Generate and auto-fix command to find text"),
-        ("qcmd logs", "Analyze log files with AI"),
-        ("qcmd --model llama3 'backup files'", "Use a specific model"),
-        ("qcmd --shell", "Start interactive shell mode"),
-        ("qcmd --status", "Display system status"),
-        ("qcmd --history", "Show command history"),
-        ("qcmd --update-check", "Check for updates")
+        ("qcmd 'list files by size'", "List files sorted by size"),
+        ("qcmd --auto 'find text'", "Auto-fix search command"),
+        ("qcmd --shell", "Interactive shell mode"),
+        ("qcmd --model llama3", "Use specific model")
     ]
     
-    print(f"{Colors.CYAN}{Colors.BOLD}Example commands:{Colors.END}")
-    print("-" * 80)
+    print(f"{Colors.CYAN}Quick Examples:{Colors.END}")
+    print(f"{Colors.BLUE}{'─' * 60}{Colors.END}")
     for cmd, desc in examples:
-        print(f"{Colors.GREEN}{cmd.ljust(40)}{Colors.END} {desc}")
-    print("-" * 80 + "\n")
+        print(f"{Colors.GREEN}{cmd.ljust(30)}{Colors.END} {desc}")
+    print(f"{Colors.BLUE}{'─' * 60}{Colors.END}\n")
 
 def print_iraq_banner():
     """
-    Print Iraqi-themed banner.
+    Print minimalist banner.
     """
-    # Iraqi flag colors in ASCII
-    red = f"{Colors.RED}█{Colors.END}"
-    white = f"{Colors.WHITE}█{Colors.END}"
-    black = f"{Colors.BLACK}█{Colors.END}"
-    
-    # Print a mini version of the Iraqi flag
-    print("\nIraqi-Powered Command Generation")
-    print(f"{red * 20}")
-    print(f"{white * 20}")
-    print(f"{black * 20}\n")
+    # Print just a minimal indicator
+    print(f"\n{Colors.BOLD}Initializing QCMD...{Colors.END}\n")
 
-def show_download_progress(total=20, message="Initializing QCMD with Iraqi excellence"):
+def show_download_progress(total=10, message="Loading QCMD..."):
     """
-    Display a progress bar with Iraqi flag colors.
+    Display a progress bar with a simple design.
     
     Args:
         total: Total number of steps
         message: Message to display with the progress bar
     """
-    # Iraqi flag colors
-    colors = [Colors.RED, Colors.WHITE, Colors.BLACK]
-    
-    print(f"\n{message}")
-    
     # Get terminal width
     term_width = shutil.get_terminal_size().columns
-    bar_width = min(term_width - 10, 50)
+    bar_width = min(term_width - 10, 40)
     
     for i in range(total + 1):
         progress = i / total
         bar_length = int(bar_width * progress)
         
-        # Create the progress bar with Iraqi flag colors
-        bar = ""
-        for j in range(bar_width):
-            if j < bar_length:
-                # Cycle through the colors
-                color_idx = (j // 3) % len(colors)
-                bar += f"{colors[color_idx]}█{Colors.END}"
-            else:
-                bar += " "
+        # Create a simple progress bar
+        bar = f"{Colors.GREEN}{'█' * bar_length}{' ' * (bar_width - bar_length)}{Colors.END}"
                 
         # Calculate percentage
         percent = progress * 100
         
         # Print the progress bar
-        sys.stdout.write(f"\r[{bar}] {percent:.1f}%")
+        sys.stdout.write(f"\r{message} [{bar}] {percent:.0f}%")
         sys.stdout.flush()
         
-        time.sleep(0.1)
+        # Shorter delay for better user experience
+        time.sleep(0.05)
         
     # End with a newline
     print("\n")
@@ -192,37 +169,26 @@ def display_help_command(current_model: str, current_temperature: float, auto_mo
         max_attempts: Maximum number of auto-correction attempts
     """
     help_text = f"""
-{Colors.GREEN}{Colors.BOLD}QCMD Interactive Shell Help{Colors.END}
-{'-' * 50}
+{Colors.GREEN}QCMD Interactive Shell{Colors.END}
+{Colors.BLUE}{'─' * 50}{Colors.END}
 
-{Colors.CYAN}{Colors.BOLD}Current Settings:{Colors.END}
-- Model: {Colors.YELLOW}{current_model}{Colors.END}
-- Temperature: {Colors.YELLOW}{current_temperature}{Colors.END}
-- Auto-correction: {Colors.YELLOW}{'Enabled' if auto_mode_enabled else 'Disabled'}{Colors.END}
-- Max auto attempts: {Colors.YELLOW}{max_attempts}{Colors.END}
+{Colors.CYAN}Settings:{Colors.END}
+• Model: {Colors.YELLOW}{current_model}{Colors.END}
+• Temp: {Colors.YELLOW}{current_temperature}{Colors.END}
+• Auto: {Colors.YELLOW}{'On' if auto_mode_enabled else 'Off'}{Colors.END}
 
-{Colors.CYAN}{Colors.BOLD}Available Commands:{Colors.END}
-{Colors.YELLOW}!help{Colors.END}          - Show this help message
-{Colors.YELLOW}!exit{Colors.END}, {Colors.YELLOW}!quit{Colors.END}    - Exit the shell
-{Colors.YELLOW}!history{Colors.END}       - Show command history
-{Colors.YELLOW}!search{Colors.END} term   - Search command history
-{Colors.YELLOW}!clear{Colors.END}         - Clear the screen
-{Colors.YELLOW}!status{Colors.END}        - Show system status
-{Colors.YELLOW}!models{Colors.END}        - List available models
-{Colors.YELLOW}!model{Colors.END} name    - Change the model
-{Colors.YELLOW}!temp{Colors.END} value    - Set temperature (0.0-1.0)
-{Colors.YELLOW}!auto{Colors.END} on/off   - Enable/disable auto-correction
-{Colors.YELLOW}!max{Colors.END} value     - Set max auto-correction attempts
-{Colors.YELLOW}!update{Colors.END}        - Check for updates
-{Colors.YELLOW}!logs{Colors.END}          - Analyze log files
-{Colors.YELLOW}!!{Colors.END}             - Repeat last command
+{Colors.CYAN}Commands:{Colors.END}
+{Colors.YELLOW}!help{Colors.END}      Show help
+{Colors.YELLOW}!exit{Colors.END}      Exit shell
+{Colors.YELLOW}!history{Colors.END}   Command history
+{Colors.YELLOW}!clear{Colors.END}     Clear screen
+{Colors.YELLOW}!model{Colors.END} X   Change model
+{Colors.YELLOW}!temp{Colors.END} X    Set temperature
+{Colors.YELLOW}!auto{Colors.END} X    Toggle auto mode
+{Colors.YELLOW}!update{Colors.END}    Check updates
+{Colors.YELLOW}!!{Colors.END}         Repeat last command
 
-{Colors.CYAN}{Colors.BOLD}Usage:{Colors.END}
-- Type a natural language description of what you want to do
-- The AI will generate a command for you
-- The command will be displayed but not executed automatically
-- Type 'y' to execute, 'n' to reject, or edit the command
-- Use !exit or Ctrl+D to quit
+{Colors.CYAN}Usage:{Colors.END} Type a command description and press Enter
 """
     print(help_text)
 
