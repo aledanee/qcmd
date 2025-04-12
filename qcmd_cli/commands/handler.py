@@ -112,23 +112,10 @@ def main():
     if args.model is None:
         args.model = config.get('model')
     
-    # Display the banner unless disabled
-    if config.get('ui', {}).get('show_iraq_banner', True):
-        print_iraq_banner()
-    
-    # Show loading animation unless disabled
-    if config.get('ui', {}).get('show_progress_bar', True):
-        show_download_progress()
-    
-    # Check for updates (unless disabled in config)
-    if config.get('check_updates', True):
-        check_for_updates()
-    
-    # Process utility commands first (no prompt required)
+    # Handle utility commands first (no banner needed)
     
     # If checking for updates
     if args.check_updates:
-        print(f"Checking for updates...")
         check_for_updates(force_display=True)
         return
     
@@ -140,7 +127,6 @@ def main():
             handle_config_command(f"set {key} {value}")
         else:
             print(f"Usage: --config KEY=VALUE")
-            print(f"Example: --config model=llama2")
         return
         
     # If showing status
@@ -157,6 +143,14 @@ def main():
     if args.logs:
         handle_log_analysis(args.model, args.log_file)
         return
+    
+    # Display minimal banner for main operations
+    if config.get('ui', {}).get('show_iraq_banner', True) and not args.no_banner:
+        print_iraq_banner()
+    
+    # Show loading animation unless disabled
+    if config.get('ui', {}).get('show_progress_bar', True) and not args.no_progress:
+        show_download_progress()
         
     # If starting interactive shell
     if args.shell:
@@ -202,16 +196,16 @@ def main():
         
     # Execute if requested, otherwise just display
     if args.execute:
-        print(f"\nExecuting: {command}\n")
+        print(f"Executing: {command}\n")
         return_code, output = execute_command(command)
         
         if return_code == 0:
-            print(f"\nCommand executed successfully.")
+            print(f"✅ Command executed successfully.")
         else:
-            print(f"\nCommand execution failed with return code {return_code}.")
+            print(f"❌ Command failed (exit code: {return_code}).")
             
         if output:
-            print(f"\nOutput:\n{output}")
+            print(f"\n{output}")
     else:
         print(f"\n{command}")
 
