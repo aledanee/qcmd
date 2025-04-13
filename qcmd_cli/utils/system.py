@@ -17,7 +17,7 @@ from typing import Dict, Any, Tuple, List, Optional
 from ..ui.display import Colors
 from ..config.settings import CONFIG_DIR, load_config, DEFAULT_MODEL
 from ..log_analysis.monitor import cleanup_stale_monitors
-from ..utils.session import cleanup_stale_sessions
+from ..utils.session import cleanup_stale_sessions, get_active_log_monitors
 
 # Ollama API settings
 OLLAMA_API = "http://127.0.0.1:11434/api"
@@ -164,26 +164,65 @@ def display_system_status():
     
     # Log monitors section
     print(f"\n{Colors.CYAN}{Colors.BOLD}► ACTIVE LOG MONITORS{Colors.END}")
-    active_monitors = cleanup_stale_monitors()
-    if active_monitors:
-        for monitor_id, info in active_monitors.items():
+    
+    # Get active log monitors from the session system
+    log_monitor_sessions = get_active_log_monitors()
+    
+    if log_monitor_sessions:
+        for session_id, info in log_monitor_sessions.items():
             log_file = info.get("log_file", "Unknown")
             pid = info.get("pid", "Unknown")
-            analyze = info.get("analyze", False)
+            model = info.get("model", "Unknown")
+            start_time = info.get("start_time", "Unknown")
+            analyze = info.get("analyze", True)
             mode = "AI Analysis" if analyze else "Watch Only"
-            print(f"  {Colors.BOLD}•{Colors.END} Monitor {Colors.YELLOW}{monitor_id}{Colors.END}: {log_file} ({Colors.GREEN}{mode}{Colors.END}, PID: {pid})")
+            
+            # Show truncated session ID and full log path
+            short_id = session_id[:8] + "..." if len(session_id) > 8 else session_id
+            print(f"  {Colors.BOLD}•{Colors.END} Monitor {Colors.YELLOW}{short_id}{Colors.END}: {log_file}")
+            print(f"    - Started: {Colors.GREEN}{start_time}{Colors.END}")
+            print(f"    - Mode: {Colors.GREEN}{mode}{Colors.END}")
+            print(f"    - Model: {Colors.GREEN}{model}{Colors.END}")
+            print(f"    - PID: {Colors.GREEN}{pid}{Colors.END}")
     else:
         print(f"  {Colors.YELLOW}No active log monitors.{Colors.END}")
+        print(f"  {Colors.YELLOW}Use 'qcmd --logs' or '/logs' in shell to start monitoring logs.{Colors.END}")
+    
+    # Legacy monitors (for backward compatibility)
+    legacy_monitors = cleanup_stale_monitors()
+    if legacy_monitors:
+        print(f"\n{Colors.CYAN}{Colors.BOLD}► LEGACY MONITORS (Pre-Session System){Colors.END}")
+        for monitor_id, info in legacy_monitors.items():
+            log_file = info.get("log_file", "Unknown")
+            pid = info.get("pid", "Unknown")
+            print(f"  {Colors.BOLD}•{Colors.END} Legacy Monitor {Colors.YELLOW}{monitor_id}{Colors.END}: {log_file} (PID: {pid})")
     
     # Active sessions section
     print(f"\n{Colors.CYAN}{Colors.BOLD}► ACTIVE SESSIONS{Colors.END}")
     active_sessions = cleanup_stale_sessions()
+    
+    # Count by session type
+    session_types = {}
+    for info in active_sessions.values():
+        session_type = info.get("type", "Unknown")
+        session_types[session_type] = session_types.get(session_type, 0) + 1
+    
     if active_sessions:
-        for session_id, info in active_sessions.items():
-            session_type = info.get("type", "Unknown")
-            start_time = info.get("start_time", "Unknown")
-            pid = info.get("pid", "Unknown")
-            print(f"  {Colors.BOLD}•{Colors.END} Session {Colors.YELLOW}{session_id}{Colors.END}: {session_type} (Started: {start_time}, PID: {pid})")
+        # Show summary by type
+        for session_type, count in session_types.items():
+            print(f"  {Colors.BOLD}•{Colors.END} {Colors.YELLOW}{count}{Colors.END} active {session_type} sessions")
+        
+        # Detail of the last interactive shell session (if any)
+        shell_sessions = {sid: info for sid, info in active_sessions.items() 
+                         if info.get("type") == "interactive_shell"}
+        if shell_sessions:
+            # Sort by last activity and get the most recent
+            latest_session_id = sorted(shell_sessions.keys(), 
+                                       key=lambda sid: shell_sessions[sid].get("last_activity", 0), 
+                                       reverse=True)[0]
+            latest_info = shell_sessions[latest_session_id]
+            start_time = latest_info.get("start_time", "Unknown")
+            print(f"  {Colors.BOLD}•{Colors.END} Latest shell session started at: {Colors.GREEN}{start_time}{Colors.END}")
     else:
         print(f"  {Colors.YELLOW}No active sessions.{Colors.END}")
     

@@ -22,7 +22,7 @@ from qcmd_cli.ui.display import Colors, print_cool_header, clear_screen
 from qcmd_cli.core.command_generator import generate_command, is_dangerous_command, list_models, fix_command
 from qcmd_cli.utils.history import save_to_history, load_history, show_history
 from qcmd_cli.utils.system import execute_command, get_system_status, display_update_status, display_system_status
-from qcmd_cli.log_analysis.log_files import handle_log_analysis
+from qcmd_cli.log_analysis.log_files import handle_log_analysis, list_active_log_monitors, stop_log_monitor
 from qcmd_cli.log_analysis.analyzer import analyze_log_file
 from qcmd_cli.utils.ollama import is_ollama_running
 
@@ -268,6 +268,21 @@ def start_interactive_shell(
                     handle_log_analysis(current_model)
                     continue
                     
+                elif user_input.lower() in ('/list-monitors', '/lm'):
+                    # List active log monitors
+                    list_active_log_monitors()
+                    continue
+                    
+                elif user_input.lower().startswith('/stop-monitor ') or user_input.lower().startswith('/sm '):
+                    # Stop a log monitor by session ID
+                    parts = user_input.split(maxsplit=1)
+                    if len(parts) == 2:
+                        session_id = parts[1]
+                        stop_log_monitor(session_id)
+                    else:
+                        print(f"{Colors.YELLOW}Usage: /stop-monitor <session_id> or /sm <session_id>{Colors.END}")
+                    continue
+                    
                 elif user_input.lower().startswith('/analyze-file '):
                     # Analyze a specific file
                     parts = user_input.split(maxsplit=1)
@@ -281,7 +296,7 @@ def start_interactive_shell(
                         print(f"{Colors.YELLOW}Usage: /analyze-file <file_path>{Colors.END}")
                     continue
                     
-                elif user_input.lower().startswith('/monitor '):
+                elif user_input.lower().startswith('/monitor ') or user_input.lower().startswith('/mon '):
                     # Monitor a specific file with AI analysis
                     parts = user_input.split(maxsplit=1)
                     if len(parts) == 2:
@@ -291,7 +306,7 @@ def start_interactive_shell(
                         else:
                             print(f"{Colors.YELLOW}File not found: {file_path}{Colors.END}")
                     else:
-                        print(f"{Colors.YELLOW}Usage: /monitor <file_path>{Colors.END}")
+                        print(f"{Colors.YELLOW}Usage: /monitor <file_path> or /mon <file_path>{Colors.END}")
                     continue
                     
                 elif user_input.lower() == '/execute':
@@ -477,9 +492,11 @@ def _show_shell_help() -> None:
     print(f"{Colors.YELLOW}/manual{Colors.END} - Disable auto mode")
     print(f"{Colors.YELLOW}/analyze{Colors.END} - Toggle error analysis")
     print(f"{Colors.YELLOW}/execute{Colors.END} - Execute last generated command (with confirmation)")
-    print(f"{Colors.YELLOW}/logs{Colors.END} - Find and analyze log files")
+    print(f"{Colors.YELLOW}/logs{Colors.END} - Find and analyze log files or manage log monitors")
+    print(f"{Colors.YELLOW}/list-monitors{Colors.END}, {Colors.YELLOW}/lm{Colors.END} - List active log monitoring sessions")
+    print(f"{Colors.YELLOW}/stop-monitor <id>{Colors.END}, {Colors.YELLOW}/sm <id>{Colors.END} - Stop a log monitor by session ID")
     print(f"{Colors.YELLOW}/analyze-file <path>{Colors.END} - Analyze a specific file")
-    print(f"{Colors.YELLOW}/monitor <path>{Colors.END} - Monitor a file continuously")
+    print(f"{Colors.YELLOW}/monitor <path>{Colors.END}, {Colors.YELLOW}/mon <path>{Colors.END} - Monitor a file continuously")
     
     print(f"\n{Colors.CYAN}Command Execution Options:{Colors.END}")
     print(f"When a command is generated, you'll be presented with these options:")
