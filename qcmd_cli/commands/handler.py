@@ -10,7 +10,7 @@ from typing import Dict, List, Any, Optional
 
 # Import from other modules
 from ..core.interactive_shell import start_interactive_shell, auto_mode
-from ..log_analysis.log_files import handle_log_analysis
+from ..log_analysis.log_files import handle_log_analysis, list_active_log_monitors, stop_log_monitor, view_monitor, open_session_monitor
 from ..utils.system import display_system_status, check_for_updates
 from ..config.settings import handle_config_command, load_config
 from ..core.command_generator import generate_command, execute_command, list_models
@@ -61,6 +61,22 @@ def parse_args():
                        help='Analyze log files')
     parser.add_argument('--log-file', type=str,
                        help='Specify a log file to analyze')
+    parser.add_argument('--analyze-once', action='store_true',
+                       help='Analyze the log file once (no monitoring)')
+    parser.add_argument('--monitor-analyze', action='store_true',
+                       help='Monitor the log file with analysis')
+    parser.add_argument('--monitor-watch', action='store_true',
+                       help='Monitor the log file without analysis (just watch)')
+    parser.add_argument('--list-monitors', action='store_true',
+                       help='List active log monitors')
+    parser.add_argument('--stop-monitor', type=str,
+                       help='Stop a log monitor by session ID')
+    parser.add_argument('--view-monitor', type=str,
+                       help='View a running monitor by session ID')
+    parser.add_argument('--open-monitor', action='store_true',
+                       help='Open a log monitor - will show list of active monitors and let you select one')
+    parser.add_argument('--analysis-only', action='store_true',
+                       help='When viewing monitors, only show analysis results without raw log lines')
     
     # Configuration options
     parser.add_argument('--model', type=str, default=None,
@@ -141,7 +157,30 @@ def main():
         
     # If analyzing logs
     if args.logs:
-        handle_log_analysis(args.model, args.log_file)
+        handle_log_analysis(args.model, args.log_file, 
+                          analyze_once=args.analyze_once,
+                          monitor_analyze=args.monitor_analyze,
+                          monitor_watch=args.monitor_watch)
+        return
+    
+    # If listing active log monitors
+    if args.list_monitors:
+        list_active_log_monitors()
+        return
+
+    # If stopping a log monitor
+    if args.stop_monitor:
+        stop_log_monitor(args.stop_monitor)
+        return
+        
+    # If viewing a log monitor
+    if args.view_monitor:
+        view_monitor(args.view_monitor, show_analysis_only=args.analysis_only)
+        return
+    
+    # If opening a monitor interactively
+    if args.open_monitor:
+        open_session_monitor(show_analysis_only=args.analysis_only)
         return
     
     # Display minimal banner for main operations

@@ -8,6 +8,7 @@ QCMD is a powerful command-line tool that generates shell commands from natural 
 - Interactive shell with command history and autocompletion
 - Auto-correction mode that fixes commands automatically
 - Log analysis and monitoring with AI assistance
+- Session-based log monitoring with background monitoring support
 - System status monitoring and configuration management
 - Safe command execution with dangerous command detection
 - Highly customizable UI with color themes and display options
@@ -83,6 +84,19 @@ qcmd --shell
 
 ```bash
 qcmd --logs
+```
+
+### Log Monitoring
+
+```bash
+# List active log monitors
+qcmd --list-monitors
+
+# Start monitoring a specific log file
+qcmd --logs --log-file /var/log/syslog
+
+# Stop a log monitor
+qcmd --stop-monitor <session-id>
 ```
 
 ### System Status

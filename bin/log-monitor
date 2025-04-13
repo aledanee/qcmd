@@ -1,0 +1,11 @@
+#!/bin/bash
+# Convenient shortcut script for opening the log monitor viewer
+
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Get the root directory of the project
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Run the view_monitor.py script
+python3 -m qcmd.qcmd_cli.log_analysis.cli.view_monitor "$@" 

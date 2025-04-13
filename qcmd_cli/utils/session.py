@@ -193,4 +193,42 @@ def is_process_running(pid):
             # Unknown OS
             return False
     except (ValueError, TypeError):
-        return False 
+        return False
+
+def create_log_monitor_session(log_file: str, model: str, analyze: bool = True) -> str:
+    """
+    Create a new session for log monitoring.
+    
+    Args:
+        log_file: Path to the log file being monitored
+        model: Model used for analysis
+        analyze: Whether to analyze the log content
+        
+    Returns:
+        Session ID as a string
+    """
+    session_info = {
+        'type': 'log_monitor',
+        'log_file': log_file,
+        'model': model,
+        'analyze': analyze,
+        'start_time': time.strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    return create_session(session_info)
+
+def get_active_log_monitors() -> Dict[str, Dict[str, Any]]:
+    """
+    Get all active log monitoring sessions.
+    
+    Returns:
+        Dictionary of session IDs to session information
+    """
+    sessions = load_sessions()
+    log_monitors = {}
+    
+    for session_id, session_info in sessions.items():
+        if session_info.get('type') == 'log_monitor' and is_process_running(session_info.get('pid', 0)):
+            log_monitors[session_id] = session_info
+            
+    return log_monitors 
