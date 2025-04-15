@@ -34,7 +34,6 @@ def load_active_monitors():
     """
     Load the active log monitors from a JSON file.
     """
-    global active_log_monitors
     try:
         if os.path.exists(ACTIVE_MONITORS_FILE):
             with open(ACTIVE_MONITORS_FILE, 'r') as f:
