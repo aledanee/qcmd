@@ -18,6 +18,7 @@ from ..ui.display import Colors
 from ..config.settings import CONFIG_DIR, load_config, DEFAULT_MODEL
 from ..log_analysis.monitor import cleanup_stale_monitors
 from ..utils.session import cleanup_stale_sessions
+from ..log_analysis.analyzer import get_active_log_monitors
 
 # Ollama API settings
 OLLAMA_API = "http://127.0.0.1:11434/api"
@@ -40,6 +41,8 @@ except ImportError:
     except Exception:
         # Use version from __init__.py
         from qcmd_cli import __version__
+
+ACTIVE_MONITORS_FILE = "/tmp/active_log_monitors.json"
 
 def get_system_status():
     """
@@ -140,17 +143,17 @@ def display_system_status():
     """
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     config = load_config()
-    
+
     # System information header
     print(f"\n{Colors.BOLD}╔══════════════════════════════════════ QCMD SYSTEM STATUS ══════════════════════════════════════╗{Colors.END}")
-    
+
     # System information section
     print(f"\n{Colors.CYAN}{Colors.BOLD}► SYSTEM INFORMATION{Colors.END}")
     print(f"  {Colors.BOLD}•{Colors.END} OS: {Colors.YELLOW}{os.name}{Colors.END}")
     print(f"  {Colors.BOLD}•{Colors.END} Python Version: {Colors.YELLOW}{platform.python_version()}{Colors.END}")
     print(f"  {Colors.BOLD}•{Colors.END} QCMD Version: {Colors.YELLOW}{__version__}{Colors.END}")
     print(f"  {Colors.BOLD}•{Colors.END} Current Time: {Colors.YELLOW}{current_time}{Colors.END}")
-    
+
     # Ollama status section
     print(f"\n{Colors.CYAN}{Colors.BOLD}► OLLAMA STATUS{Colors.END}")
     ollama_status, api_url, models = check_ollama_status()
@@ -161,20 +164,23 @@ def display_system_status():
         print(f"  {Colors.BOLD}•{Colors.END} Available Models: {Colors.YELLOW}{models_str}{Colors.END}")
     else:
         print(f"  {Colors.BOLD}•{Colors.END} Available Models: {Colors.RED}None found{Colors.END}")
-    
+
     # Log monitors section
     print(f"\n{Colors.CYAN}{Colors.BOLD}► ACTIVE LOG MONITORS{Colors.END}")
-    active_monitors = cleanup_stale_monitors()
-    if active_monitors:
-        for monitor_id, info in active_monitors.items():
-            log_file = info.get("log_file", "Unknown")
-            pid = info.get("pid", "Unknown")
-            analyze = info.get("analyze", False)
-            mode = "AI Analysis" if analyze else "Watch Only"
-            print(f"  {Colors.BOLD}•{Colors.END} Monitor {Colors.YELLOW}{monitor_id}{Colors.END}: {log_file} ({Colors.GREEN}{mode}{Colors.END}, PID: {pid})")
-    else:
-        print(f"  {Colors.YELLOW}No active log monitors.{Colors.END}")
-    
+    try:
+        if os.path.exists(ACTIVE_MONITORS_FILE):
+            with open(ACTIVE_MONITORS_FILE, 'r') as f:
+                active_monitors = json.load(f)
+                if active_monitors:
+                    for thread_id, log_file in active_monitors.items():
+                        print(f"  {Colors.BOLD}•{Colors.END} Monitor {Colors.YELLOW}{thread_id}{Colors.END}: {log_file}")
+                else:
+                    print(f"  {Colors.YELLOW}No active log monitors.{Colors.END}")
+        else:
+            print(f"  {Colors.YELLOW}No active log monitors.{Colors.END}")
+    except Exception as e:
+        print(f"{Colors.RED}Error reading active log monitors: {e}{Colors.END}")
+
     # Active sessions section
     print(f"\n{Colors.CYAN}{Colors.BOLD}► ACTIVE SESSIONS{Colors.END}")
     active_sessions = cleanup_stale_sessions()
@@ -186,7 +192,7 @@ def display_system_status():
             print(f"  {Colors.BOLD}•{Colors.END} Session {Colors.YELLOW}{session_id}{Colors.END}: {session_type} (Started: {start_time}, PID: {pid})")
     else:
         print(f"  {Colors.YELLOW}No active sessions.{Colors.END}")
-    
+
     # Disk space section
     print(f"\n{Colors.CYAN}{Colors.BOLD}► DISK SPACE (LOG DIRECTORY){Colors.END}")
     if os.path.exists(CONFIG_DIR):
@@ -195,19 +201,19 @@ def display_system_status():
         used_gb = used / (1024**3)
         free_gb = free / (1024**3)
         percent = used / total * 100
-        
+
         # Progress bar for disk usage
         bar_width = 30
         filled_length = int(bar_width * percent / 100)
         bar = f"{Colors.GREEN}{'█' * filled_length}{Colors.YELLOW}{'░' * (bar_width - filled_length)}{Colors.END}"
-        
+
         print(f"  {Colors.BOLD}•{Colors.END} Space on {Colors.YELLOW}{CONFIG_DIR}{Colors.END}:")
         print(f"  {Colors.BOLD}•{Colors.END} Used: {Colors.YELLOW}{used_gb:.2f} GB{Colors.END} / Free: {Colors.YELLOW}{free_gb:.2f} GB{Colors.END} / Total: {Colors.YELLOW}{total_gb:.2f} GB{Colors.END}")
         print(f"  {Colors.BOLD}•{Colors.END} Usage: {Colors.YELLOW}{percent:.1f}%{Colors.END}")
         print(f"  {bar}")
     else:
         print(f"  {Colors.YELLOW}Configuration directory not found.{Colors.END}")
-    
+
     # Add update status
     print(f"\n{Colors.CYAN}{Colors.BOLD}► UPDATE STATUS{Colors.END}")
     update_info = check_for_updates(False)
@@ -215,7 +221,7 @@ def display_system_status():
         current_version = update_info.get('current_version', 'Unknown')
         latest_version = update_info.get('latest_version', 'Unknown')
         update_available = update_info.get('update_available', False)
-        
+
         if update_available:
             print(f"  {Colors.BOLD}•{Colors.END} Update Available: {Colors.GREEN}Yes{Colors.END}")
             print(f"  {Colors.BOLD}•{Colors.END} Current Version: {Colors.YELLOW}{current_version}{Colors.END}")
@@ -226,7 +232,7 @@ def display_system_status():
             print(f"  {Colors.BOLD}•{Colors.END} Version: {Colors.YELLOW}{current_version}{Colors.END}")
     else:
         print(f"  {Colors.YELLOW}Could not check for updates.{Colors.END}")
-    
+
     # Footer
     print(f"\n{Colors.BOLD}╚════════════════════════════════════════════════════════════════════════════════════════════════╝{Colors.END}\n")
 
@@ -382,4 +388,4 @@ def format_bytes(bytes_value):
         if bytes_value < 1024.0:
             return f"{bytes_value:.2f} {unit}"
         bytes_value /= 1024.0
-    return f"{bytes_value:.2f} PB" 
+    return f"{bytes_value:.2f} PB"

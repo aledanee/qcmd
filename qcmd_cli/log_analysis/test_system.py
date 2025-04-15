@@ -8,7 +8,6 @@ import os
 import sys
 import json
 import tempfile
-import re
 from unittest.mock import patch, MagicMock
 from io import StringIO
 
@@ -21,12 +20,6 @@ from qcmd_cli.utils.system import (
     execute_command, format_bytes, display_system_status
 )
 from qcmd_cli.log_analysis.analyzer import active_log_monitors
-
-
-def strip_ansi_escape_codes(text):
-    """Remove ANSI escape codes from the given text."""
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    return ansi_escape.sub('', text)
 
 
 class TestSystemUtilities(unittest.TestCase):
@@ -174,7 +167,7 @@ class TestDisplaySystemStatus(unittest.TestCase):
         display_system_status()
 
         # Verify output
-        output = strip_ansi_escape_codes(mock_stdout.getvalue())
+        output = mock_stdout.getvalue()
         self.assertIn("► ACTIVE LOG MONITORS", output)
         self.assertIn("Monitor 12345: /var/log/test1.log", output)
         self.assertIn("Monitor 67890: /var/log/test2.log", output)
@@ -192,7 +185,7 @@ class TestDisplaySystemStatus(unittest.TestCase):
         display_system_status()
 
         # Verify output
-        output = strip_ansi_escape_codes(mock_stdout.getvalue())
+        output = mock_stdout.getvalue()
         self.assertIn("► ACTIVE LOG MONITORS", output)
         self.assertIn("No active log monitors.", output)
 
