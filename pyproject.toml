@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 # This uses the PyPI-optimized README for better display on PyPI
 name = "ibrahimiq-qcmd"
-version = "1.0.17"
+version = "1.1.0"
 authors = [
     {name = "Ibrahim IQ", email = "example@example.com"}
 ]
@@ -55,4 +55,4 @@ py-modules = []
 
 [project.scripts]
 qcmd = "qcmd_cli.commands.handler:main"
-qcmd-post-install = "qcmd_cli.post_install:main" 
+qcmd-post-install = "qcmd_cli.post_install:main"
