@@ -19,6 +19,7 @@ from ..config.settings import CONFIG_DIR, load_config, DEFAULT_MODEL
 from ..log_analysis.monitor import cleanup_stale_monitors
 from ..utils.session import cleanup_stale_sessions
 from ..log_analysis.analyzer import get_active_log_monitors
+from ..log_analysis.monitor_state import active_log_monitors, load_active_monitors
 
 # Ollama API settings
 OLLAMA_API = "http://127.0.0.1:11434/api"
@@ -165,21 +166,16 @@ def display_system_status():
     else:
         print(f"  {Colors.BOLD}•{Colors.END} Available Models: {Colors.RED}None found{Colors.END}")
 
+    # Load active monitors first
+    load_active_monitors()
+    
     # Log monitors section
     print(f"\n{Colors.CYAN}{Colors.BOLD}► ACTIVE LOG MONITORS{Colors.END}")
-    try:
-        if os.path.exists(ACTIVE_MONITORS_FILE):
-            with open(ACTIVE_MONITORS_FILE, 'r') as f:
-                active_monitors = json.load(f)
-                if active_monitors:
-                    for thread_id, log_file in active_monitors.items():
-                        print(f"  {Colors.BOLD}•{Colors.END} Monitor {Colors.YELLOW}{thread_id}{Colors.END}: {log_file}")
-                else:
-                    print(f"  {Colors.YELLOW}No active log monitors.{Colors.END}")
-        else:
-            print(f"  {Colors.YELLOW}No active log monitors.{Colors.END}")
-    except Exception as e:
-        print(f"{Colors.RED}Error reading active log monitors: {e}{Colors.END}")
+    if active_log_monitors:
+        for thread_id, log_file in active_log_monitors.items():
+            print(f"  {Colors.BOLD}•{Colors.END} Monitor {Colors.YELLOW}{thread_id}{Colors.END}: {log_file}")
+    else:
+        print(f"  {Colors.YELLOW}No active log monitors.{Colors.END}")
 
     # Active sessions section
     print(f"\n{Colors.CYAN}{Colors.BOLD}► ACTIVE SESSIONS{Colors.END}")
