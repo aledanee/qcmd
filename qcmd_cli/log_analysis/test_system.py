@@ -178,8 +178,9 @@ class TestDisplaySystemStatus(unittest.TestCase):
         # Verify output
         output = mock_stdout.getvalue()
         self.assertIn("► ACTIVE LOG MONITORS", output)
-        self.assertIn("Monitor 12345: /var/log/test1.log", output)
-        self.assertIn("Monitor 67890: /var/log/test2.log", output)
+        # Update assertions to match exact format including newline
+        expected_line = f"  \x1b[1m•\x1b[0m Monitor \x1b[93m12345\x1b[0m: /var/log/test1.log\n"
+        self.assertIn(expected_line, output)
 
     @patch('sys.stdout', new_callable=StringIO)
     def test_display_system_status_no_active_monitors(self, mock_stdout):

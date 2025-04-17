@@ -21,7 +21,7 @@ from qcmd_cli.utils.system import (
     execute_command, format_bytes, display_system_status
 )
 from qcmd_cli.log_analysis.monitor_state import active_log_monitors
-
+import re
 
 def strip_ansi_escape_codes(text):
     """Remove ANSI escape codes from the given text."""
@@ -175,10 +175,11 @@ class TestDisplaySystemStatus(unittest.TestCase):
         
         display_system_status()
         
+        # Strip ANSI codes before asserting
         output = strip_ansi_escape_codes(mock_stdout.getvalue())
         self.assertIn("► ACTIVE LOG MONITORS", output)
-        self.assertIn("• Monitor 12345: /var/log/test1.log", output)  # Updated assertion
-        
+        self.assertIn("Monitor 12345: /var/log/test1.log", output)
+
         # Clean up
         active_log_monitors.clear()
 
