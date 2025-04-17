@@ -7,11 +7,17 @@ import re
 import json
 import time
 import signal
+import threading
 from typing import List, Dict, Optional, Tuple, Any
 
 # Import from local modules once they are created
 from ..config.settings import DEFAULT_MODEL
 from ..ui.display import Colors
+from .monitor_state import (
+    active_log_monitors,
+    save_active_monitors,
+    load_active_monitors
+)
 
 def handle_log_analysis(model: str = DEFAULT_MODEL, specific_file: str = None) -> None:
     """
@@ -46,10 +52,71 @@ def handle_log_analysis(model: str = DEFAULT_MODEL, specific_file: str = None) -
     if selected_file:
         analyze_log_file(selected_file, model)
 
+def analyze_log_entry(entry: str) -> str:
+    """
+    Analyze a single log entry and generate a meaningful description.
+
+    Args:
+        entry: The log entry to analyze
+
+    Returns:
+        A description of what the log entry indicates
+    """
+    # Example parsing logic (can be extended for more complex analysis)
+    if "error" in entry.lower():
+        return "This log entry indicates an error occurred. Please check the details."
+    elif "warning" in entry.lower():
+        return "This log entry indicates a warning. It might require attention."
+    elif "info" in entry.lower():
+        return "This log entry provides informational details."
+    else:
+        return "This log entry does not match known patterns."
+
+def monitor_log_file(log_file: str, model: str, stop_event: threading.Event) -> None:
+    """
+    Monitor a log file for new lines and analyze them in real-time.
+
+    Args:
+        log_file: Path to the log file
+        model: Model to use for analysis
+        stop_event: Event to signal the thread to stop
+    """
+    thread_id = threading.get_ident()
+    active_log_monitors[thread_id] = log_file
+    save_active_monitors()  # Save to persistent storage
+    print(f"{Colors.GREEN}Starting live monitoring for: {log_file}{Colors.END}")
+
+    try:
+        with open(log_file, 'r') as file:
+            # Move to the end of the file
+            file.seek(0, os.SEEK_END)
+
+            while not stop_event.is_set():
+                line = file.readline()
+                if not line:
+                    time.sleep(1)  # Wait for new lines
+                    continue
+
+                # Perform Log Analysis Results
+                print(f"\n{Colors.CYAN}New Log Entry:{Colors.END} {line.strip()}")
+                analyze_log_content(line, log_file, model)
+
+                # Perform Text Analysis
+                description = analyze_log_entry(line)
+                print(f"\n{Colors.GREEN}Text Analysis:{Colors.END}")
+                print(f"Description: {description}")
+
+    except Exception as e:
+        print(f"{Colors.RED}Error during live monitoring: {e}{Colors.END}")
+    finally:
+        # Remove the monitor from the active list when the thread ends
+        del active_log_monitors[thread_id]
+        save_active_monitors()  # Update persistent storage
+
 def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool = False, analyze: bool = True) -> None:
     """
     Analyze a log file using AI.
-    
+
     Args:
         log_file: Path to the log file
         model: Model to use for analysis
@@ -61,20 +128,49 @@ def analyze_log_file(log_file: str, model: str = DEFAULT_MODEL, background: bool
         print(f"{Colors.RED}Error: File {log_file} not found.{Colors.END}")
         return
 
-    print(f"\n{Colors.CYAN}Analyzing log file: {log_file}{Colors.END}")
-    
-    # Read file content
-    try:
-        content = read_large_file(log_file)
-        if not content:
-            print(f"{Colors.YELLOW}Log file is empty.{Colors.END}")
-            return
-            
-        # Perform analysis
-        analyze_log_content(content, log_file, model)
-        
-    except Exception as e:
-        print(f"{Colors.RED}Error analyzing log file: {str(e)}{Colors.END}")
+    if background:
+        # Create a stop event for the monitoring thread
+        stop_event = threading.Event()
+
+        def signal_handler(sig, frame):
+            if sig == signal.SIGINT:  # Control + C
+                print(f"\n{Colors.RED}Terminating live monitoring session...{Colors.END}")
+                stop_event.set()
+                # Reset signal handler to default behavior
+                signal.signal(signal.SIGINT, signal.SIG_DFL)
+            elif sig == signal.SIGTSTP:  # Control + H
+                print(f"\n{Colors.YELLOW}Hiding live monitoring session. Press Control + H again to show.{Colors.END}")
+
+        # Register signal handlers in the main thread
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTSTP, signal_handler)
+
+        # Start live monitoring in a separate thread
+        monitor_thread = threading.Thread(target=monitor_log_file, args=(log_file, model, stop_event), daemon=True)
+        monitor_thread.start()
+
+        # Wait for the thread to finish
+        try:
+            monitor_thread.join()
+        except KeyboardInterrupt:
+            # Ensure proper cleanup on KeyboardInterrupt
+            stop_event.set()
+            monitor_thread.join()
+    else:
+        print(f"\n{Colors.CYAN}Analyzing log file: {log_file}{Colors.END}")
+
+        # Read file content
+        try:
+            content = read_large_file(log_file)
+            if not content:
+                print(f"{Colors.YELLOW}Log file is empty.{Colors.END}")
+                return
+
+            # Perform analysis
+            analyze_log_content(content, log_file, model)
+
+        except Exception as e:
+            print(f"{Colors.RED}Error analyzing log file: {str(e)}{Colors.END}")
 
 def analyze_log_content(log_content: str, log_file: str, model: str = DEFAULT_MODEL) -> None:
     """
@@ -119,4 +215,13 @@ def read_large_file(file_path: str, chunk_size: int = 1024 * 1024) -> str:
             if not chunk:
                 break
             content.append(chunk)
-    return "".join(content) 
+    return "".join(content)
+
+def get_active_log_monitors() -> List[Dict[str, Any]]:
+    """
+    Retrieve the list of active log monitors.
+
+    Returns:
+        A list of dictionaries containing active log monitor details.
+    """
+    return [{"thread_id": tid, "log_file": log_file} for tid, log_file in active_log_monitors.items()]

@@ -1,2 +1,7 @@
 requests>=2.25.0
-configparser>=5.0.0 
+requests>=2.25.0
+configparser>=5.0.0
+pytest>=7.0.0
+coverage>=6.0.0
+twine>=4.0.0
+wheel>=0.40.0

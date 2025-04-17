@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.18] - 2025-04-15
+
+### Added
+- Improved `/status` command to display active log monitors.
+- Enhanced live monitoring functionality with persistent storage for active monitors.
+- Added meaningful text analysis for log entries.
+
+### Fixed
+- Resolved repeated signal handling issues during live monitoring.
+
 ## [1.0.17] - 2024-04-12
 
 ### Changed
@@ -26,4 +36,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration management
 - Tab completion support
 - Multiple model support
-- Safety features for dangerous command detection 
+- Safety features for dangerous command detection

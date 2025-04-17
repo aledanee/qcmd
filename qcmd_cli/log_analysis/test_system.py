@@ -8,7 +8,6 @@ import os
 import sys
 import json
 import tempfile
-import re
 from unittest.mock import patch, MagicMock
 from io import StringIO
 
@@ -20,13 +19,7 @@ from qcmd_cli.utils.system import (
     check_for_updates, display_update_status, 
     execute_command, format_bytes, display_system_status
 )
-from qcmd_cli.log_analysis.monitor_state import active_log_monitors
-import re
-
-def strip_ansi_escape_codes(text):
-    """Remove ANSI escape codes from the given text."""
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    return ansi_escape.sub('', text)
+from qcmd_cli.log_analysis.monitor_state import active_log_monitors, load_active_monitors
 
 
 class TestSystemUtilities(unittest.TestCase):
@@ -166,22 +159,28 @@ class TestDisplaySystemStatus(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         active_log_monitors.clear()
-    
+        load_active_monitors()
+
+    def tearDown(self):
+        """Clean up after tests."""
+        active_log_monitors.clear()
+
     @patch('sys.stdout', new_callable=StringIO)
     def test_display_system_status_with_active_monitors(self, mock_stdout):
         """Test display_system_status when active log monitors exist."""
+        # Simulate active log monitors using the shared dictionary
         active_log_monitors[12345] = '/var/log/test1.log'
         active_log_monitors[67890] = '/var/log/test2.log'
-        
-        display_system_status()
-        
-        # Strip ANSI codes before asserting
-        output = strip_ansi_escape_codes(mock_stdout.getvalue())
-        self.assertIn("► ACTIVE LOG MONITORS", output)
-        self.assertIn("Monitor 12345: /var/log/test1.log", output)
 
-        # Clean up
-        active_log_monitors.clear()
+        # Call the function
+        display_system_status()
+
+        # Verify output
+        output = mock_stdout.getvalue()
+        self.assertIn("► ACTIVE LOG MONITORS", output)
+        # Update assertions to match exact format including newline
+        expected_line = f"  \x1b[1m•\x1b[0m Monitor \x1b[93m12345\x1b[0m: /var/log/test1.log\n"
+        self.assertIn(expected_line, output)
 
     @patch('sys.stdout', new_callable=StringIO)
     def test_display_system_status_no_active_monitors(self, mock_stdout):
@@ -193,7 +192,7 @@ class TestDisplaySystemStatus(unittest.TestCase):
         display_system_status()
 
         # Verify output
-        output = strip_ansi_escape_codes(mock_stdout.getvalue())
+        output = mock_stdout.getvalue()
         self.assertIn("► ACTIVE LOG MONITORS", output)
         self.assertIn("No active log monitors.", output)
 
