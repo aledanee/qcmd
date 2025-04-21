@@ -223,43 +223,46 @@ def display_log_selection(log_files: List[str]) -> Optional[str]:
 def handle_log_analysis(model: str = DEFAULT_MODEL, file_path: str = None) -> None:
     """
     Main entry point for log analysis feature.
-    
+
     Args:
         model: The model to use for analysis
         file_path: Optional path to a specific file to analyze
     """
     print(f"{Colors.GREEN}Starting log analysis tool...{Colors.END}")
-    
+
     # If a specific file is provided, analyze it directly
     if file_path:
         if os.path.exists(file_path) and os.path.isfile(file_path):
-            # Ask if user wants continuous monitoring
-            monitor = input(f"{Colors.GREEN}Monitor this file continuously? (y/n): {Colors.END}").lower()
-            
-            # Analyze the specified file
-            analyze_log_file(file_path, model, monitor in ['y', 'yes'])
+            # Ask if user wants to analyze once or monitor continuously
+            action = input(f"{Colors.GREEN}Do you want to (a)nalyze once or (m)onitor continuously? (a/m): {Colors.END}").lower()
+            if action.startswith('m'):
+                analyze_log_file(file_path, model, background=True)
+            elif action.startswith('a'):
+                analyze_log_file(file_path, model, background=False)
+            else:
+                print(f"{Colors.YELLOW}Invalid choice. Exiting log analysis.{Colors.END}")
         else:
             print(f"{Colors.RED}Error: File {file_path} does not exist or is not accessible.{Colors.END}")
         return
-    
+
     # Find log files
     log_files = find_log_files()
-    
+
     if not log_files:
         print(f"{Colors.YELLOW}No accessible log files found on the system.{Colors.END}")
         return
-    
+
     # Let user select a log file
     selected_log = display_log_selection(log_files)
-    
+
     if not selected_log:
         return
-        
+
     # Special handling for journalctl entries
     if selected_log.startswith("journalctl:"):
         service_name = selected_log[11:]
         print(f"{Colors.GREEN}Fetching logs for service: {Colors.BOLD}{service_name}{Colors.END}")
-        
+
         try:
             # Create a temporary file to store the logs
             with tempfile.NamedTemporaryFile(delete=False, mode='w+') as temp_file:
@@ -271,31 +274,37 @@ def handle_log_analysis(model: str = DEFAULT_MODEL, file_path: str = None) -> No
                 )
                 temp_file.write(logs)
                 temp_file_path = temp_file.name
-            
-            # Ask if user wants continuous monitoring
-            monitor = input(f"{Colors.GREEN}Monitor this service log continuously? (y/n): {Colors.END}").lower()
-            
-            # Analyze the log file
-            analyze_log_file(temp_file_path, model, monitor in ['y', 'yes'])
-            
+
+            # Ask if user wants to analyze once or monitor continuously
+            action = input(f"{Colors.GREEN}Do you want to (a)nalyze once or (m)onitor continuously? (a/m): {Colors.END}").lower()
+            if action.startswith('m'):
+                analyze_log_file(temp_file_path, model, background=True)
+            elif action.startswith('a'):
+                analyze_log_file(temp_file_path, model, background=False)
+            else:
+                print(f"{Colors.YELLOW}Invalid choice. Exiting log analysis.{Colors.END}")
+
             # Clean up temp file if not in continuous mode
-            if monitor not in ['y', 'yes']:
+            if action.startswith('a'):
                 try:
                     os.unlink(temp_file_path)
                 except:
                     pass
-                    
+
         except subprocess.SubprocessError as e:
             print(f"{Colors.RED}Error fetching service logs: {e}{Colors.END}")
         except Exception as e:
             print(f"{Colors.RED}Error: {e}{Colors.END}")
-            
+
     else:
-        # Ask if user wants continuous monitoring
-        monitor = input(f"{Colors.GREEN}Monitor this log file continuously? (y/n): {Colors.END}").lower()
-        
-        # Analyze the selected log file
-        analyze_log_file(selected_log, model, monitor in ['y', 'yes'])
+        # Ask if user wants to analyze once or monitor continuously
+        action = input(f"{Colors.GREEN}Do you want to (a)nalyze once or (m)onitor continuously? (a/m): {Colors.END}").lower()
+        if action.startswith('m'):
+            analyze_log_file(selected_log, model, background=True)
+        elif action.startswith('a'):
+            analyze_log_file(selected_log, model, background=False)
+        else:
+            print(f"{Colors.YELLOW}Invalid choice. Exiting log analysis.{Colors.END}")
 
 def handle_log_selection(selected_log: str, model: str) -> None:
     """
@@ -369,4 +378,4 @@ def handle_log_selection(selected_log: str, model: str) -> None:
         if os.path.exists(selected_log) and os.path.isfile(selected_log):
             analyze_log_file(selected_log, model, background, analyze)
         else:
-            print(f"{Colors.RED}Error: File {selected_log} does not exist or is not accessible.{Colors.END}") 
+            print(f"{Colors.RED}Error: File {selected_log} does not exist or is not accessible.{Colors.END}")
