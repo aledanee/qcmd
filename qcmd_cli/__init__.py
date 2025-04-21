@@ -8,7 +8,7 @@ try:
     __version__ = get_version()
 except ImportError:
     # Fallback for backward compatibility
-    __version__ = "1.0.16"
+    __version__ = "1.0.18"
 
 # Don't import modules here to avoid circular dependencies
 

@@ -131,14 +131,16 @@ def update_pyproject_toml(new_version: str) -> None:
 def main():
     """Main entry point for the script."""
     parser = argparse.ArgumentParser(description="Bump the QCMD version number")
-    parser.add_argument('bump_type', choices=['major', 'minor', 'patch'],
-                        help="Type of version bump to perform")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--bump', choices=['major', 'minor', 'patch'],
+                    help="Type of version bump to perform")
+    group.add_argument('--version', action='store_true',
+                    help="Show the current version and exit")
+    group.add_argument('--set', metavar='VERSION',
+                    help="Set the version to a specific value")
+    
     parser.add_argument('--legacy', action='store_true',
-                        help="Also update version in legacy files for backward compatibility")
-    parser.add_argument('--version', action='store_true',
-                        help="Show the current version and exit")
-    parser.add_argument('--set', metavar='VERSION',
-                        help="Set the version to a specific value")
+                    help="Also update version in legacy files for backward compatibility")
     
     args = parser.parse_args()
     
@@ -156,7 +158,7 @@ def main():
                 return
             new_version = args.set
         else:
-            new_version = bump_version(current_version, args.bump_type)
+            new_version = bump_version(current_version, args.bump)
         
         print(f"Bumping version: {current_version} -> {new_version}")
         
@@ -175,4 +177,4 @@ def main():
         print(f"Error: {e}")
 
 if __name__ == "__main__":
-    main() 
+    main()
