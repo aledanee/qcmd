@@ -5,3 +5,4 @@ pytest>=7.0.0
 coverage>=6.0.0
 twine>=4.0.0
 wheel>=0.40.0
+markdown
