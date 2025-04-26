@@ -1,0 +1,39 @@
+name: Update Documentation
+
+on:
+  push:
+    paths:
+      - 'README.md'
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'README.md'
+
+jobs:
+  update-docs:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.x'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install markdown jinja2
+          
+      - name: Update HTML documentation
+        run: python .github/scripts/update_docs.py
+        
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add qcmd-docs.html
+          git commit -m "Update documentation from README.md" || exit 0
+          git push
